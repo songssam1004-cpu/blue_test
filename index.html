@@ -1,0 +1,70 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <title>Bluefy Web Bluetooth Demo</title>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      padding: 20px;
+    }
+    button {
+      padding: 12px 20px;
+      font-size: 16px;
+      border-radius: 6px;
+      border: none;
+      cursor: pointer;
+      background: #4a90e2;
+      color: #fff;
+    }
+    #log {
+      margin-top: 20px;
+      padding: 10px;
+      background: #f0f0f0;
+      height: 200px;
+      overflow-y: auto;
+      white-space: pre-line;
+    }
+  </style>
+</head>
+<body>
+
+  <h1>Bluefy Web Bluetooth Example</h1>
+  <button id="connectBtn">Bluetooth 연결하기</button>
+
+  <div id="log"></div>
+
+  <script>
+    const logBox = document.getElementById("log");
+    function log(msg) {
+      logBox.textContent += msg + "\n";
+    }
+
+    document.getElementById("connectBtn").addEventListener("click", async () => {
+      try {
+        log("📡 장치 검색 중...");
+
+        const device = await navigator.bluetooth.requestDevice({
+          acceptAllDevices: true,
+          optionalServices: ["battery_service"] // 예시 서비스
+        });
+
+        log("🔵 선택된 장치: " + device.name);
+
+        const server = await device.gatt.connect();
+        log("🔗 GATT 서버 연결됨");
+
+        const service = await server.getPrimaryService("battery_service");
+        const characteristic = await service.getCharacteristic("battery_level");
+
+        const value = await characteristic.readValue();
+        log("🔋 배터리 레벨: " + value.getUint8(0) + "%");
+
+      } catch (error) {
+        log("❗ 오류: " + error);
+      }
+    });
+  </script>
+
+</body>
+</html>
