@@ -2,69 +2,79 @@
 <html lang="ko">
 <head>
   <meta charset="UTF-8">
-  <title>Bluefy Web Bluetooth Demo</title>
+  <title>BLE 체중계 연결</title>
   <style>
-    body {
-      font-family: Arial, sans-serif;
-      padding: 20px;
-    }
+    body { font-family: Arial; padding: 20px; }
     button {
-      padding: 12px 20px;
-      font-size: 16px;
-      border-radius: 6px;
-      border: none;
-      cursor: pointer;
-      background: #4a90e2;
-      color: #fff;
+      padding: 12px 20px; background:#4a90e2; color:white;
+      border:none; border-radius:6px; cursor:pointer; font-size:16px;
     }
-    #log {
-      margin-top: 20px;
-      padding: 10px;
-      background: #f0f0f0;
-      height: 200px;
-      overflow-y: auto;
-      white-space: pre-line;
+    #log { 
+      margin-top:20px; background:#f5f5f5; padding:15px;
+      height:200px; overflow-y:auto; white-space:pre-line;
+    }
+    #weight {
+      font-size: 32px; margin-top: 20px; font-weight: bold;
     }
   </style>
 </head>
 <body>
 
-  <h1>Bluefy Web Bluetooth Example</h1>
-  <button id="connectBtn">Bluetooth 연결하기</button>
+<h1>블루투스 체중계 연결</h1>
+<button id="connectBtn">체중계 연결하기</button>
 
-  <div id="log"></div>
+<div id="weight">몸무게: -- kg</div>
+<div id="log"></div>
 
-  <script>
-    const logBox = document.getElementById("log");
-    function log(msg) {
-      logBox.textContent += msg + "\n";
+<script>
+  const logBox = document.getElementById("log");
+  const weightBox = document.getElementById("weight");
+
+  function log(msg) {
+    logBox.textContent += msg + "\n";
+  }
+
+  document.getElementById("connectBtn").addEventListener("click", async () => {
+
+    try {
+      log("🔍 체중계 검색 시작...");
+
+      const device = await navigator.bluetooth.requestDevice({
+        filters: [{
+          services: ["weight_scale"]   // UUID: 0x181D
+        }]
+      });
+
+      log("📡 선택한 장치: " + device.name);
+
+      const server = await device.gatt.connect();
+      log("🔗 GATT 서버 연결됨");
+
+      const service = await server.getPrimaryService("weight_scale");
+      const characteristic = await service.getCharacteristic("weight_measurement");
+
+      log("⚙️ Weight Measurement Characteristic 구독 시작...");
+      await characteristic.startNotifications();
+
+      characteristic.addEventListener("characteristicvaluechanged", (event) => {
+        const value = event.target.value;
+
+        // Weight Scale Measurement Format
+        const flags = value.getUint8(0);
+        const weightRaw = value.getUint16(1, true); // little-endian
+
+        let weightKg = weightRaw / 200; // 대부분 BLE 체중계는 /200 사용함
+
+        weightBox.textContent = `몸무게: ${weightKg.toFixed(2)} kg`;
+        log("📥 데이터 수신: " + weightKg.toFixed(2) + " kg");
+      });
+
+    } catch (error) {
+      log("❗ 오류: " + error);
     }
 
-    document.getElementById("connectBtn").addEventListener("click", async () => {
-      try {
-        log("📡 장치 검색 중...");
-
-        const device = await navigator.bluetooth.requestDevice({
-          acceptAllDevices: true,
-          optionalServices: ["battery_service"] // 예시 서비스
-        });
-
-        log("🔵 선택된 장치: " + device.name);
-
-        const server = await device.gatt.connect();
-        log("🔗 GATT 서버 연결됨");
-
-        const service = await server.getPrimaryService("battery_service");
-        const characteristic = await service.getCharacteristic("battery_level");
-
-        const value = await characteristic.readValue();
-        log("🔋 배터리 레벨: " + value.getUint8(0) + "%");
-
-      } catch (error) {
-        log("❗ 오류: " + error);
-      }
-    });
-  </script>
+  });
+</script>
 
 </body>
 </html>
