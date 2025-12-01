@@ -3,12 +3,12 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>교직원 수첩 프로토타입</title>
+    <title>전화번호부 프로토타입</title>
     <script src="https://cdn.jsdelivr.net/npm/vue@2.6.14/dist/vue.js"></script>
     <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
     
     <style>
-        /* [기본 스타일 - 원본 CSS가 없으므로 기능 확인을 위해 임의 작성] */
+        /* [기본 스타일 - 기능 확인을 위해 임의 작성된 스타일] */
         body { font-family: 'Malgun Gothic', sans-serif; margin: 0; padding: 0; background: #f5f5f5; }
         .container { max-width: 800px; margin: 0 auto; background: #fff; min-height: 100vh; }
         [v-cloak] { display: none; }
@@ -29,7 +29,7 @@
         .search_form dd { flex: 1; display: flex; gap: 5px; }
         .srch_input_box { flex: 1; display: flex; }
         .srch_input_box input, .srch_input_box select { width: 100%; padding: 8px; border: 1px solid #ccc; }
-        .search_btn, .reset_btn { padding: 8px 15px; background: #333; color: #fff; border-radius: 4px; font-size: 13px; }
+        .search_btn, .reset_btn { padding: 8px 15px; background: #333; color: #fff; border-radius: 4px; font-size: 13px; cursor: pointer; }
 
         /* 조직도 트리 스타일 */
         .tree-node { padding: 10px; border-bottom: 1px solid #eee; cursor: pointer; position: relative; }
@@ -52,7 +52,7 @@
         .staff_cont .bottom { background: #f8f8f8; padding: 10px; border-radius: 5px; font-size: 0.9em; }
         .staff_cont dl { display: flex; margin: 3px 0; }
         .staff_cont dt { width: 80px; color: #888; }
-        .major_view { display: block; margin-top: 10px; padding: 8px; background: #eef4fb; color: #0055a5; text-align: center; border-radius: 4px; font-size: 0.9em; }
+        .major_view { display: block; margin-top: 10px; padding: 8px; background: #eef4fb; color: #0055a5; text-align: center; border-radius: 4px; font-size: 0.9em; cursor: pointer; }
 
         /* 모달 스타일 */
         .modal_box { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.5); z-index: 999; display: flex; justify-content: center; align-items: center; }
@@ -61,7 +61,7 @@
         .modal_box dl { margin: 15px 0; border-bottom: 1px solid #eee; padding-bottom: 5px; }
         .modal_box dt { color: #0055a5; font-weight: bold; margin-bottom: 5px; }
         .modal_box .btn_wrap { margin-top: 20px; text-align: center; }
-        .modal_box .btn_wrap a { padding: 10px 30px; background: #0055a5; color: #fff; border-radius: 20px; }
+        .modal_box .btn_wrap a { padding: 10px 30px; background: #0055a5; color: #fff; border-radius: 20px; cursor: pointer; }
 
         .hidden { overflow: hidden; }
         .all_btn_wrap { padding: 10px; text-align: right; }
@@ -76,18 +76,19 @@
 <body>
 
 <script>
-    // 1. 유틸리티 Mocking
+    // 1. 유틸리티 Mocking (마스킹 기능)
     var util = {
         maks: function(val, type) {
             if (!val) return "";
             if (type === 'EMAIL') {
+                // 이메일 마스킹 (예: ho****ng@test.com)
                 return val.replace(/(.{2})(.*)(@.*)/, "$1****$3");
             }
             return val;
         }
     };
 
-    // 2. 통신 모듈 Mocking (comm.post)
+    // 2. 통신 모듈 Mocking (comm.post - 가짜 API 호출)
     var comm = {
         post: function(options, callback) {
             console.log("[Mock API Call]", options.url, options.params);
@@ -131,7 +132,7 @@
                 }
                 else if (options.url.includes("searchStaffList.do") || options.url.includes("searchDetailStaffList2.do")) {
                      response.list = [
-                        { constntNm: "검색된_홍길동", jbttlCdNm: "부교수", userDivcdNm: "교원", deptNm: "전자공학과", email: "search@univ.ac.kr", cryalTelNo: "010-1111-2222", premisTelno: "3333", laboratory: "제2공학관", srngDetailMjrNm: "반도체", staffBirthYn: "Y", selfBrdt: "19751212" }
+                        { constntNm: "검색된_박영희", jbttlCdNm: "부교수", userDivcdNm: "교원", deptNm: "전자공학과", email: "search@univ.ac.kr", cryalTelNo: "010-1111-2222", premisTelno: "3333", laboratory: "제2공학관", srngDetailMjrNm: "반도체", staffBirthYn: "Y", selfBrdt: "19751212" }
                     ];
                 }
                 else if (options.url.includes("getOneDeptList.do")) {
@@ -158,7 +159,7 @@
         multiLanguage: 'KOR'
     };
     
-    // 4. 기타 전역 함수
+    // 4. 기타 전역 함수 (원본 소스에 있었던 함수)
     function goOpenBrowser(url) {
         alert("새 브라우저 열기: " + url);
     }
@@ -187,7 +188,7 @@
                 </div>
                 <div class="inner org_chart">
                     <div class="top_depth" style="padding:15px; font-weight:bold; font-size:1.2em;">
-                        서울시립대학교
+                        전화번호부 주식회사
                     </div>
                    <div class="all_btn_wrap">
                         <ul>
@@ -199,7 +200,7 @@
                     <ul v-show="orgDeptList">
                         <li class="president-node">
                             <div class="tree-node depth1" :class="{ active: isActiveNode('00000') }" @click="toggleNode('00000')">
-                                총장
+                                대표이사
                             </div>
                             <ul v-if="president" v-show="isActiveNode('00000')" class="list_wrap box sty2">
                                 <li class="staff_cont">
@@ -212,7 +213,7 @@
                                     </div>
                                     <div class="bottom">
                                         <dl><dt>사무실</dt><dd>{{president.laboratory}}</dd></dl>
-                                        <dl><dt>이메일</dt><dd>{{president.email}} <button @click="copyEmail(president.email)">복사</button></dd></dl>
+                                        <dl><dt>이메일</dt><dd>{{_mask(president.email, 'EMAIL')}} <button @click="copyEmail(president.email)">복사</button></dd></dl>
                                     </div>
                                 </li>
                             </ul>
@@ -235,8 +236,8 @@
                                                 </div>
                                             </div>
                                             <div class="bottom">
-                                                <dl><dt>연락처</dt><dd>{{member.premisTelno}}</dd></dl>
-                                                <dl><dt>이메일</dt><dd>{{member.email}}</dd></dl>
+                                                <dl><dt>연락처</dt><dd>{{_sliceTel(member.premisTelno)}}</dd></dl>
+                                                <dl><dt>이메일</dt><dd>{{_mask(member.email, 'EMAIL')}}</dd></dl>
                                             </div>
                                             <a href="#" class="major_view" @click="majorPopModal(member)">상세보기</a>
                                         </li>
@@ -254,7 +255,7 @@
                                                         <p><img src="https://via.placeholder.com/60" alt="프로필"></p>
                                                         <div>
                                                             <div class="name"><strong>{{member.constntNm}}</strong></div>
-                                                            <span>{{member.jbttlCdNm}} · {{member.deptNm}}</span>
+                                                            <span>{{member.jbttlCdNm}}</span>
                                                         </div>
                                                     </div>
                                                     <a href="#" class="major_view" @click="majorPopModal(member)">상세보기</a>
@@ -366,6 +367,9 @@
                              <p><strong>{{iList.constntNm}}</strong> <span style="font-size:0.8em; color:#666;">{{iList.deptNm}}</span></p>
                         </li>
                     </ul>
+                     <div v-show="!indexList || indexList.length == 0" style="text-align:center; padding:20px;">
+                        데이터가 없습니다.
+                     </div>
                 </div>
             </div>
         </div>
@@ -456,12 +460,13 @@
             methods: {
                 initOrgChartDeptList : function (){
                     var vm = this;
+                    // Mock API Call
                     comm.post({
                         url: "./getOrgChartDeptList.do",
                         params: { 'upDeptCd' : '00001' }
                     }, function (data) {
                         vm.orgDeptList = data.list.list;
-                        // 초기 로딩 시 데이터 있으면 펼침 처리를 위해 1뎁스 열기 (옵션)
+                        // 초기 로딩 시 데이터 있으면 펼침 처리
                         if(vm.orgDeptList && vm.orgDeptList.length > 0){
                             vm.$set(vm.activeNodes, vm.orgDeptList[0].deptCd, true);
                         }
@@ -479,15 +484,14 @@
                     vm.positionList = [];
                 },
                 searchDetailPosition : function () {
-                    // 프로토타입용 단순 검색
                     var vm = this;
                     comm.post({
                         url: "./searchDetailPositionList.do", // Mocked URL
                         params: { 'constntNm' : vm.constntNm }
                     }, function (data) {
-                        vm.positionList = data.list; // Mocked data uses 'searchStaffList' result structure usually
+                        vm.positionList = data.list; 
                     });
-                    // Fallback using fetchMembers mock for demo
+                    // 검색 결과가 없는 경우를 위한 더미 데이터 표시 로직 (프로토타입용)
                     if(!vm.positionList.length) vm.fetchMembers('9999'); 
                 },
                 searchDetail : function () {
@@ -503,15 +507,6 @@
                         vm.staffList = data.list;
                         vm.searchPerformed = true;
                     });
-                },
-                selectItem(index) {
-                    this.selectedIndex = index;
-                },
-                swipeIndex : function (status){
-                   // 단순화
-                   if(status == "plus" && this.selectedIndex < 13) this.selectedIndex++;
-                   else if(status == "minus" && this.selectedIndex > 0) this.selectedIndex--;
-                   this.getIndexList(this.selectedIndex);
                 },
                 getIndexList : function (index){
                     var vm = this;
@@ -530,19 +525,14 @@
                     vm.activeTabIndex = 2; // 상세검색 탭으로 이동
                     vm.searchDetail(); // 검색 실행
                 },
-                scrollToTop() {
-                    window.scrollTo({ top: 0, behavior: 'smooth' });
-                },
-                scrollToBottom() {
-                    window.scrollTo({ top: document.body.scrollHeight, behavior: 'smooth' });
-                },
                 toggleNode: function (deptCd) {
-                    if (deptCd === "00000") {
+                    if (deptCd === "00000") { // 대표이사 노드
                         const isActive = !this.activeNodes[deptCd];
                         this.$set(this.activeNodes, deptCd, isActive);
                         if (isActive) this.getPresidentInfo(deptCd);
                         return;
                     }
+                    // 일반 부서 노드
                     const isActive = !this.activeNodes[deptCd];
                     this.$set(this.activeNodes, deptCd, isActive);
                     if (isActive) {
@@ -554,7 +544,6 @@
                 },
                 openAllNodes() {
                     this.$set(this.activeNodes, "00000", true);
-                    // 재귀적으로 모든 노드 열기 구현 필요하나 프로토타입에선 1뎁스만
                     if(this.orgDeptList) {
                         this.orgDeptList.forEach(node => {
                             this.$set(this.activeNodes, node.deptCd, true);
@@ -597,7 +586,6 @@
                 },
                 async fetchMembers(deptCd) {
                     var vm = this;
-                    // Mock delay
                     await comm.post({
                         url: "./fetchMembers.do",
                         params: { 'ogdpDeptCd' : deptCd }
@@ -621,11 +609,9 @@
                 _mask: function (val, type) {
                     return util.maks(val, type);
                 },
-                _subString : function(val) {
-                    return val ? val.substring(0,4) : val;
-                },
                 _sliceTel : function(val) {
-                    return val ? (val.length > 3 ? val.slice(-4) : val) : "-";
+                    // 국번 뒤 4자리만 표시 (예: 1234-5678에서 5678만 표시)
+                    return val ? (val.length >= 4 ? val.slice(-4) : val) : "-";
                 },
                 copyEmail(email) {
                     alert("클립보드 복사(시뮬레이션): " + email);
