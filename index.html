@@ -1,13 +1,404 @@
-<%@ page language="java" contentType="text/html; charset=UTF-8" pageEncoding="UTF-8" %>
-<%@ taglib prefix="c" uri="http://java.sun.com/jsp/jstl/core" %>
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>교직원 수첩 프로토타입</title>
+    <script src="https://cdn.jsdelivr.net/npm/vue@2.6.14/dist/vue.js"></script>
+    <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+    
+    <style>
+        /* [기본 스타일 - 원본 CSS가 없으므로 기능 확인을 위해 임의 작성] */
+        body { font-family: 'Malgun Gothic', sans-serif; margin: 0; padding: 0; background: #f5f5f5; }
+        .container { max-width: 800px; margin: 0 auto; background: #fff; min-height: 100vh; }
+        [v-cloak] { display: none; }
+        ul, li { list-style: none; padding: 0; margin: 0; }
+        a { text-decoration: none; color: inherit; }
+        
+        /* 탭 스타일 */
+        .tab_wrap { display: flex; border-bottom: 2px solid #ddd; }
+        .tab_wrap li { flex: 1; text-align: center; padding: 15px 0; cursor: pointer; background: #eee; }
+        .tab_wrap li.on { background: #fff; font-weight: bold; border-bottom: 2px solid #0055a5; color: #0055a5; }
+        .cont-tabbox { display: none; padding: 20px; }
+        .cont-tabbox.on { display: block; }
+
+        /* 검색 폼 스타일 */
+        .search_form { background: #f9f9f9; padding: 15px; border-radius: 5px; margin-bottom: 20px; }
+        .search_form dl { display: flex; margin-bottom: 10px; align-items: center; }
+        .search_form dt { width: 80px; font-weight: bold; }
+        .search_form dd { flex: 1; display: flex; gap: 5px; }
+        .srch_input_box { flex: 1; display: flex; }
+        .srch_input_box input, .srch_input_box select { width: 100%; padding: 8px; border: 1px solid #ccc; }
+        .search_btn, .reset_btn { padding: 8px 15px; background: #333; color: #fff; border-radius: 4px; font-size: 13px; }
+
+        /* 조직도 트리 스타일 */
+        .tree-node { padding: 10px; border-bottom: 1px solid #eee; cursor: pointer; position: relative; }
+        .tree-node:hover { background-color: #f0f8ff; }
+        .tree-node::before { content: '▶'; display: inline-block; margin-right: 5px; font-size: 0.8em; transition: transform 0.2s; }
+        .tree-node.active::before { transform: rotate(90deg); }
+        .tree-node.no_depth::before { content: '•'; transform: none; color: #ccc; }
+        
+        /* 뎁스별 들여쓰기 */
+        .depth1 { padding-left: 10px; font-weight: bold; background: #fafafa; }
+        .depth2 { padding-left: 30px; }
+        .depth3 { padding-left: 50px; }
+
+        /* 직원 카드 스타일 */
+        .staff_cont { border: 1px solid #ddd; padding: 15px; margin: 10px 0; border-radius: 8px; background: #fff; }
+        .staff_cont .top { display: flex; gap: 15px; margin-bottom: 10px; }
+        .staff_cont img { width: 60px; height: 60px; border-radius: 50%; object-fit: cover; background: #eee; }
+        .staff_cont .name { font-size: 1.1em; margin-bottom: 5px; }
+        .staff_cont .s_info { font-size: 0.9em; color: #666; margin-top: 5px; }
+        .staff_cont .bottom { background: #f8f8f8; padding: 10px; border-radius: 5px; font-size: 0.9em; }
+        .staff_cont dl { display: flex; margin: 3px 0; }
+        .staff_cont dt { width: 80px; color: #888; }
+        .major_view { display: block; margin-top: 10px; padding: 8px; background: #eef4fb; color: #0055a5; text-align: center; border-radius: 4px; font-size: 0.9em; }
+
+        /* 모달 스타일 */
+        .modal_box { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.5); z-index: 999; display: flex; justify-content: center; align-items: center; }
+        .modal_box .cont { background: #fff; padding: 25px; width: 300px; border-radius: 10px; }
+        .modal_box h3 { margin-top: 0; border-bottom: 2px solid #333; padding-bottom: 10px; }
+        .modal_box dl { margin: 15px 0; border-bottom: 1px solid #eee; padding-bottom: 5px; }
+        .modal_box dt { color: #0055a5; font-weight: bold; margin-bottom: 5px; }
+        .modal_box .btn_wrap { margin-top: 20px; text-align: center; }
+        .modal_box .btn_wrap a { padding: 10px 30px; background: #0055a5; color: #fff; border-radius: 20px; }
+
+        .hidden { overflow: hidden; }
+        .all_btn_wrap { padding: 10px; text-align: right; }
+        .all_btn_wrap span { cursor: pointer; margin-left: 10px; font-size: 0.9em; color: #555; border: 1px solid #ddd; padding: 2px 8px; }
+        
+        /* 색인 스타일 */
+        .index_wrap { display: flex; overflow-x: auto; gap: 5px; padding: 10px; background: #fff; border-bottom: 1px solid #eee; }
+        .index_wrap span { flex: 0 0 auto; width: 30px; height: 30px; display: flex; align-items: center; justify-content: center; border: 1px solid #ddd; border-radius: 50%; cursor: pointer; }
+        .index_wrap span.on { background: #0055a5; color: #fff; border-color: #0055a5; }
+    </style>
+</head>
+<body>
+
+<script>
+    // 1. 유틸리티 Mocking
+    var util = {
+        maks: function(val, type) {
+            if (!val) return "";
+            if (type === 'EMAIL') {
+                return val.replace(/(.{2})(.*)(@.*)/, "$1****$3");
+            }
+            return val;
+        }
+    };
+
+    // 2. 통신 모듈 Mocking (comm.post)
+    var comm = {
+        post: function(options, callback) {
+            console.log("[Mock API Call]", options.url, options.params);
+            
+            // 네트워크 지연 시뮬레이션
+            setTimeout(function() {
+                var response = { list: [], status: "success" };
+
+                // URL별 가짜 데이터 반환
+                if (options.url.includes("getOrgChartDeptList.do")) {
+                    response.list = {
+                        list: [
+                            { 
+                                deptNm: "대학본부", deptCd: "10000", 
+                                children: [
+                                    { deptNm: "교무처", deptCd: "11000", children: [], members: [] },
+                                    { deptNm: "학생처", deptCd: "12000", children: [], members: [] }
+                                ],
+                                members: []
+                            },
+                            { 
+                                deptNm: "공과대학", deptCd: "20000", 
+                                children: [
+                                    { deptNm: "전자전기컴퓨터공학부", deptCd: "21000", children: [], members: [] },
+                                    { deptNm: "기계공학과", deptCd: "22000", children: [], members: [] }
+                                ],
+                                members: []
+                            }
+                        ]
+                    };
+                } 
+                else if (options.url.includes("fetchMembers.do")) {
+                    // 랜덤 멤버 생성
+                    response.list = [
+                        { constntNm: "홍길동", jbttlCdNm: "교수", userDivcdNm: "교원", deptNm: "컴퓨터공학부", email: "hong@univ.ac.kr", cryalTelNo: "010-1234-5678", premisTelno: "1234", laboratory: "제1공학관 301호", srngDetailMjrNm: "인공지능", staffBirthYn: "Y", selfBrdt: "19800101" },
+                        { constntNm: "김철수", jbttlCdNm: "팀장", userDivcdNm: "직원", deptNm: "교무과", email: "kim@univ.ac.kr", cryalTelNo: "010-9876-5432", premisTelno: "5678", laboratory: "본관 101호", taskFldNm: "학적 관리", staffBirthYn: "N", selfBrdt: "19850505" }
+                    ];
+                }
+                else if (options.url.includes("getPresidentInfo.do")) {
+                    response.info = { constntNm: "이총장", jbttlCdNm: "총장", userDivcdNm: "교원", deptNm: "총장실", email: "president@univ.ac.kr", cryalTelNo: "010-0000-0000", premisTelno: "0001", laboratory: "본관 2층", srngDetailMjrNm: "대학행정" };
+                }
+                else if (options.url.includes("searchStaffList.do") || options.url.includes("searchDetailStaffList2.do")) {
+                     response.list = [
+                        { constntNm: "검색된_홍길동", jbttlCdNm: "부교수", userDivcdNm: "교원", deptNm: "전자공학과", email: "search@univ.ac.kr", cryalTelNo: "010-1111-2222", premisTelno: "3333", laboratory: "제2공학관", srngDetailMjrNm: "반도체", staffBirthYn: "Y", selfBrdt: "19751212" }
+                    ];
+                }
+                else if (options.url.includes("getOneDeptList.do")) {
+                    response.list = [{deptCd: 'D01', deptNm: '공과대학'}, {deptCd: 'D02', deptNm: '인문대학'}];
+                }
+                else if (options.url.includes("getDeptList.do")) {
+                    response.list = [{deptCd: 'D01-01', deptNm: '컴퓨터과학부'}, {deptCd: 'D01-02', deptNm: '신소재공학과'}];
+                }
+                else if (options.url.includes("getIndexList.do")) {
+                    response.list = [
+                        { constntNm: "강감찬", deptNm: "역사학과", constntNo: "1" },
+                        { constntNm: "고길동", deptNm: "만화창작과", constntNo: "2" }
+                    ];
+                }
+
+                callback(response);
+            }, 100);
+        }
+    };
+
+    // 3. JSP 파라미터 맵 Mocking
+    var paramMap = {
+        session: { menuGrpId: 'CCMN000.930' },
+        multiLanguage: 'KOR'
+    };
+    
+    // 4. 기타 전역 함수
+    function goOpenBrowser(url) {
+        alert("새 브라우저 열기: " + url);
+    }
+</script>
+
+<div id="container" class="container">
+    <div id="content" v-cloak class="staffnote">
+        
+        <ul class="tab_wrap tab-script">
+            <li v-for="(tab, index) in tabs" :key="index" :class="{ 'on': activeTabIndex === index }">
+                <a href="#" @click.prevent="setActiveTab(index)">
+                    <span v-if="language == 'ENG'">{{ tab.enName }}</span>
+                    <span v-else>{{ tab.name }}</span>
+                </a>
+            </li>
+        </ul>
+    
+        <div class="cont-tabwrap">
+            <div class="cont-tabbox" :class="{ 'on': activeTabIndex === 0 }">
+                <div class="search_form_wrap">
+                    <div class="sticky_wrap">
+                        <div class="top_bn_btn" @click="goProfileConfig()" style="text-align: right; padding: 10px; cursor: pointer; color: #666; font-size: 0.8em;">
+                            <p>교직원수첩 공개정보 수정 ></p>
+                        </div>
+                    </div>
+                </div>
+                <div class="inner org_chart">
+                    <div class="top_depth" style="padding:15px; font-weight:bold; font-size:1.2em;">
+                        서울시립대학교
+                    </div>
+                   <div class="all_btn_wrap">
+                        <ul>
+                            <li class="all_close" @click="closeAllNodes()"><span>전체닫기</span></li>
+                            <li class="all_open" @click="openAllNodes()"><span>전체열기</span></li>
+                        </ul>
+                    </div>
+                    
+                    <ul v-show="orgDeptList">
+                        <li class="president-node">
+                            <div class="tree-node depth1" :class="{ active: isActiveNode('00000') }" @click="toggleNode('00000')">
+                                총장
+                            </div>
+                            <ul v-if="president" v-show="isActiveNode('00000')" class="list_wrap box sty2">
+                                <li class="staff_cont">
+                                    <div class="top">
+                                        <p><img src="https://via.placeholder.com/60" alt="프로필"></p>
+                                        <div>
+                                            <div class="name"><strong>{{president.constntNm}}</strong></div>
+                                            <span>{{president.jbttlCdNm}} · {{president.deptNm}}</span>
+                                        </div>
+                                    </div>
+                                    <div class="bottom">
+                                        <dl><dt>사무실</dt><dd>{{president.laboratory}}</dd></dl>
+                                        <dl><dt>이메일</dt><dd>{{president.email}} <button @click="copyEmail(president.email)">복사</button></dd></dl>
+                                    </div>
+                                </li>
+                            </ul>
+                        </li>
+
+                        <li v-for="node in orgDeptList" :key="node.deptCd">
+                            <div class="tree-node depth1" :class="{ active: isActiveNode(node.deptCd), 'no_depth' : (!node.children || !node.children.length) && (!node.members || !node.members.length) }" @click="toggleNode(node.deptCd)">
+                                {{ node.deptNm }}
+                            </div>
+
+                            <ul v-show="isActiveNode(node.deptCd)">
+                                <li v-show="node.members && node.members.length">
+                                    <ul class="list_wrap box sty2">
+                                        <li v-for="(member, idx) in node.members" :key="'m1-'+idx" class="staff_cont">
+                                            <div class="top">
+                                                <p><img src="https://via.placeholder.com/60" alt="프로필"></p>
+                                                <div>
+                                                    <div class="name"><strong>{{member.constntNm}}</strong></div>
+                                                    <span>{{member.jbttlCdNm}} · {{member.deptNm}}</span>
+                                                </div>
+                                            </div>
+                                            <div class="bottom">
+                                                <dl><dt>연락처</dt><dd>{{member.premisTelno}}</dd></dl>
+                                                <dl><dt>이메일</dt><dd>{{member.email}}</dd></dl>
+                                            </div>
+                                            <a href="#" class="major_view" @click="majorPopModal(member)">상세보기</a>
+                                        </li>
+                                    </ul>
+                                </li>
+                                <li v-for="child in node.children" :key="child.deptCd">
+                                    <div class="tree-node depth2" :class="{ active: isActiveNode(child.deptCd), 'no_depth' : !child.children.length && (!child.members || !child.members.length) }" @click="toggleNode(child.deptCd)">
+                                        {{ child.deptNm }}
+                                    </div>
+                                    <ul v-show="isActiveNode(child.deptCd)">
+                                        <li v-show="child.members && child.members.length">
+                                            <ul class="list_wrap box sty2">
+                                                <li v-for="(member, idx) in child.members" :key="'m2-'+idx" class="staff_cont">
+                                                    <div class="top">
+                                                        <p><img src="https://via.placeholder.com/60" alt="프로필"></p>
+                                                        <div>
+                                                            <div class="name"><strong>{{member.constntNm}}</strong></div>
+                                                            <span>{{member.jbttlCdNm}} · {{member.deptNm}}</span>
+                                                        </div>
+                                                    </div>
+                                                    <a href="#" class="major_view" @click="majorPopModal(member)">상세보기</a>
+                                                </li>
+                                            </ul>
+                                        </li>
+                                    </ul>
+                                </li>
+                            </ul>
+                        </li>
+                    </ul>
+                </div>
+            </div>
+
+            <div class="cont-tabbox" :class="{ 'on': activeTabIndex === 1 }">
+                <div class="search_form">
+                     <dl>
+                        <dt>대학/처</dt>
+                        <dd>
+                            <div class="srch_input_box">
+                                <select v-model="oneDept" @change="getDeptList('4',$event.target.value)">
+                                    <option value="">전체</option>
+                                    <option v-for="od in oneDeptList" :value="od.deptCd">{{od.deptNm}}</option>
+                                </select>
+                            </div>
+                        </dd>
+                    </dl>
+                    <dl>
+                        <dt>부서</dt>
+                        <dd>
+                            <div class="srch_input_box">
+                                <select v-model="twoDept">
+                                    <option value="">전체</option>
+                                    <option v-for="td in twoDeptList" :value="td.deptCd">{{td.deptNm}}</option>
+                                </select>
+                            </div>
+                        </dd>
+                    </dl>
+                    <dl>
+                        <dt>성명</dt>
+                        <dd>
+                            <div class="srch_input_box">
+                                <input type="text" v-model="constntNm" placeholder="이름 입력"/>
+                            </div>
+                            <a href="#" class="search_btn" @click="searchDetailPosition()">검색</a>
+                        </dd>
+                    </dl>
+                </div>
+                
+                <div class="inner">
+                     <ul class="list_wrap box sty2" v-show="positionList && positionList.length > 0">
+                        <li v-for="sList in positionList" class="staff_cont">
+                             <div class="top">
+                                <p><img src="https://via.placeholder.com/60" alt=""></p>
+                                <div>
+                                    <div class="name"><strong>{{sList.constntNm}}</strong></div>
+                                    <span>{{sList.jbttlCdNm}}</span>
+                                </div>
+                            </div>
+                        </li>
+                     </ul>
+                     <div v-show="!positionList || positionList.length == 0" style="text-align:center; padding:20px;">
+                        검색 결과가 없습니다.
+                     </div>
+                </div>
+            </div>
+
+            <div class="cont-tabbox" :class="{ 'on': activeTabIndex === 2 }">
+                <div class="search_form">
+                    <dl>
+                         <dd class="no_dt">
+                            <div class="srch_input_box">
+                                <select v-model="searchType" style="width:80px; margin-right:5px;">
+                                    <option value="">전체</option>
+                                    <option v-for="ss in searchSelect" :value="ss.type">{{ss.typeNm}}</option>
+                                </select>
+                                <input type="text" v-model="constntNm" placeholder="검색어를 입력하세요."/>
+                            </div>
+                            <a href="#" class="reset_btn" @click="reset()">초기화</a>
+                            <a href="#" class="search_btn" @click="searchDetail()">검색</a>
+                        </dd>
+                    </dl>
+                </div>
+                <div class="inner">
+                     <ul class="list_wrap box sty2" v-show="staffList && staffList.length > 0">
+                        <li v-for="sList in staffList" class="staff_cont">
+                             <div class="top">
+                                <p><img src="https://via.placeholder.com/60" alt=""></p>
+                                <div>
+                                    <div class="name"><strong>{{sList.constntNm}}</strong></div>
+                                    <span>{{sList.jbttlCdNm}}</span>
+                                </div>
+                            </div>
+                            <a href="#" class="major_view" @click="majorPopModal(sList)">상세보기</a>
+                        </li>
+                     </ul>
+                </div>
+            </div>
+
+            <div class="cont-tabbox index" :class="{ 'on': activeTabIndex === 3 }">
+                 <div class="index_wrap">
+                    <span v-for="(item, index) in indexItem" :key="index" :class="{ on: index === selectedIndex }" @click="getIndexList(index)">
+                        {{ item.word }}
+                    </span>
+                </div>
+                <div class="inner">
+                    <ul class="list_wrap box sty1" v-show="indexList && indexList.length > 0">
+                        <li v-for="iList in indexList" @click="searchIndex(iList.constntNo)" style="padding:10px; border-bottom:1px solid #eee; cursor:pointer;">
+                             <p><strong>{{iList.constntNm}}</strong> <span style="font-size:0.8em; color:#666;">{{iList.deptNm}}</span></p>
+                        </li>
+                    </ul>
+                </div>
+            </div>
+        </div>
+
+        <div class="modal_box" id="major_view" v-show="isMajorViewVisible">
+            <div class="cont">
+                <dl>
+                    <h3>{{popModalDetailNm}}</h3>
+                </dl>
+                <dl>
+                    <dt>소속</dt>
+                    <dd>{{popModalDetailPosi}} · {{popModalDetailDept}}</dd>
+                </dl>
+                <dl>
+                    <dt>{{srngDetailMjrTitle}}</dt>
+                    <dd>{{srngDetailMjrNm}}</dd>
+                </dl>
+                <div class="btn_wrap">
+                    <a href="#" class="col01" @click="majorPopModal()">확인</a>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
 <script>
     var documentReady = function () {
         var vm = new Vue({
             el: '#content',
             data: function () {
                 return {
-                    activeTabIndex: 0, // 현재 활성화된 탭 인덱스
-                    tabs: [ // 탭 데이터
+                    activeTabIndex: 0, 
+                    tabs: [ 
                         { name: '조직도' , enName: 'Organization' },
                         { name: '보직자 조회' , enName: 'Positions'},
                         { name: '상세검색' , enName: 'Search'},
@@ -24,95 +415,31 @@
                     constntNo : '',
                     constntNm : '',
                     ogdpDeptCd: '',
-                    selectDeptNm : '',  //조직도 선택으로 고른 부서이름
-                    orgDeptList : [{'members' : []}],   //조직도 리스트
-                    positionList : [],  //보직자 리스트
-                    staffList : [],     //스태프 리스트
-                    searchPerformed : false, //검색 수행여부
+                    selectDeptNm : '',
+                    orgDeptList : [],
+                    positionList : [],
+                    staffList : [],
+                    searchPerformed : false,
                     selectedIndex: 0,
                     indexItem : [
-                                    {num : 0, word : 'ㄱ'},
-                                    {num : 2, word : 'ㄴ'},
-                                    {num : 3, word : 'ㄷ'},
-                                    {num : 5, word : 'ㄹ'},
-                                    {num : 6, word : 'ㅁ'},
-                                    {num : 7, word : 'ㅂ'},
-                                    {num : 9, word : 'ㅅ'},
-                                    {num : 11, word : 'ㅇ'},
-                                    {num : 12, word : 'ㅈ'},
-                                    {num : 14, word : 'ㅊ'},
-                                    {num : 15, word : 'ㅋ'},
-                                    {num : 16, word : 'ㅌ'},
-                                    {num : 18, word : 'ㅎ'},
-                                    {num : 99, word : 'A-Z'}
-                                ],     //색인 숫자와 자음 리스트
-                    indexList : [],     //색인 리스트
-                    oneDept : '',       //1번뎁스 셀렉트값
-                    twoDept : '',       //2번뎁스 셀렉트값
-                    thrDept : '',       //3번뎁스 셀렉트값
-                    oneDeptList : [],   //1번뎁스 리스트
-                    twoDeptList : [],   //2번뎁스 리스트
-                    thrDeptList : [],   //3번뎁스 리스트
-                    list: [             //트리구조 형태 확인 용으로 남겨놓음
-                            {
-                                id: 1,
-                                name: 'Node 1',
-                                children: [
-                                    {
-                                        id: 2,
-                                        name: 'Node 1.1',
-                                        children: [
-                                            {
-                                                id: 7,
-                                                name: 'Node 1.1.1',
-                                                children: [
-                                                    { id: 11, name: 'Node 1.1.1.1' },
-                                                    { id: 12, name: 'Node 1.1.1.2' }
-                                                ]
-                                            },
-                                            {
-                                                id: 8,
-                                                name: 'Node 1.1.2',
-                                                children: [
-                                                    { id: 13, name: 'Node 1.1.2.1' },
-                                                    { id: 14, name: 'Node 1.1.2.2' }
-                                                ]
-                                            }
-                                        ]
-                                    },
-                                    {
-                                        id: 3,
-                                        name: 'Node 1.2',
-                                        children: [
-                                            {
-                                                id: 9,
-                                                name: 'Node 1.2.1',
-                                                children: [
-                                                    { id: 15, name: 'Node 1.2.1.1' },
-                                                    { id: 16, name: 'Node 1.2.1.2' }
-                                                ]
-                                            },
-                                            {
-                                                id: 10,
-                                                name: 'Node 1.2.2',
-                                                children: [
-                                                    { id: 17, name: 'Node 1.2.2.1' },
-                                                    { id: 18, name: 'Node 1.2.2.2' }
-                                                ]
-                                            }
-                                        ]
-                                    }
-                                ]
-                            },
-                        ],
+                        {num : 0, word : 'ㄱ'}, {num : 2, word : 'ㄴ'},
+                        {num : 3, word : 'ㄷ'}, {num : 5, word : 'ㄹ'},
+                        {num : 6, word : 'ㅁ'}, {num : 7, word : 'ㅂ'},
+                        {num : 9, word : 'ㅅ'}, {num : 11, word : 'ㅇ'},
+                        {num : 12, word : 'ㅈ'}, {num : 14, word : 'ㅊ'},
+                        {num : 15, word : 'ㅋ'}, {num : 16, word : 'ㅌ'},
+                        {num : 18, word : 'ㅎ'}, {num : 99, word : 'A-Z'}
+                    ],
+                    indexList : [],
+                    oneDept : '',
+                    twoDept : '',
+                    thrDept : '',
+                    oneDeptList : [],
+                    twoDeptList : [],
+                    thrDeptList : [],
                     activeNodes: {},
-                    activeNodes2: {},
-                    language : '',
-                    pageInfo: {
-                        pageNo: 1,
-                        pageSize: 10,
-                        totalCount: 0,
-                    },
+                    language : 'KOR', // Mock Default
+                    pageInfo: { pageNo: 1, pageSize: 10, totalCount: 0 },
                     wiseMenuId : '',
                     menuGrpId: '',
                     president : {}
@@ -123,34 +450,21 @@
                 vm.initOrgChartDeptList();
                 vm.getOneDeptList();
                 vm.getIndexList(0);
-                vm.searchPosition();
                 vm.getPresidentInfo('00000');
-
-                vm.menuGrpId = '${paramMap.session.menuGrpId}';
-                //vm.getWiseMenuAply();
-            },
-            mounted: function () {
-                console.log('mounted p');
-                var vm =this;
-                vm.language = `${paramMap.multiLanguage}`
-            },
-            updated: function () {
-                console.log('updated p');
-            },
-            destroyed: function () {
-                console.log('destroyed p');
+                vm.menuGrpId = 'CCMN000.930'; // Mock data
             },
             methods: {
                 initOrgChartDeptList : function (){
                     var vm = this;
                     comm.post({
                         url: "./getOrgChartDeptList.do",
-                        dataType: "json",
-                        params: {
-                            'upDeptCd' : '00001'
-                        }
+                        params: { 'upDeptCd' : '00001' }
                     }, function (data) {
                         vm.orgDeptList = data.list.list;
+                        // 초기 로딩 시 데이터 있으면 펼침 처리를 위해 1뎁스 열기 (옵션)
+                        if(vm.orgDeptList && vm.orgDeptList.length > 0){
+                            vm.$set(vm.activeNodes, vm.orgDeptList[0].deptCd, true);
+                        }
                     });
                 },
                 reset: function () {
@@ -160,81 +474,31 @@
                     vm.selectDeptNm = '';
                     vm.oneDept = '';
                     vm.twoDept = '';
-                    vm.thrDept = '';
                     vm.twoDeptList = [];
-                    vm.thrDeptList = [];
-                    vm.constntNo = '';
-                    vm.searchType = '';
                     vm.staffList = [];
-                    //vm.positionList = [];
-                    vm.searchPosition();
-                },
-                searchPosition : function () {
-                    var vm = this;
-                    comm.post({
-                        url: "./searchPositionList.do",
-                        dataType: "json",
-                        params: {
-                            'constntNm' : vm.constntNm,
-                            'constntNo' : vm.constntNo,
-                            'ogdpDeptCd' : vm.ogdpDeptCd
-                        }
-                    }, function (data) {
-                        vm.positionList = data.list;
-                    });
+                    vm.positionList = [];
                 },
                 searchDetailPosition : function () {
+                    // 프로토타입용 단순 검색
                     var vm = this;
-                    var deptCd = '';
-                    vm.selectDeptNm = '';
-                    if(vm.thrDept != ''){
-                        deptCd = vm.thrDept;
-                    }else if(vm.twoDept != ''){
-                        deptCd = vm.twoDept;
-                    }else if(vm.oneDept != ''){
-                        deptCd = vm.oneDept;
-                    }
                     comm.post({
-                        url: "./searchDetailPositionList.do",
-                        dataType: "json",
-                        params: {
-                            'constntNm' : vm.constntNm,
-                            'deptCd' : deptCd
-                        }
+                        url: "./searchDetailPositionList.do", // Mocked URL
+                        params: { 'constntNm' : vm.constntNm }
                     }, function (data) {
-                        vm.positionList = data.list;
+                        vm.positionList = data.list; // Mocked data uses 'searchStaffList' result structure usually
                     });
-                },
-                search : function () {
-                    var vm = this;
-                    vm.activeTabIndex = 2;
-                    comm.post({
-                        url: "./searchStaffList.do",
-                        dataType: "json",
-                        params: {
-                            'constntNm' : vm.constntNm,
-                            'constntNo' : vm.constntNo,
-                            'ogdpDeptCd' : vm.ogdpDeptCd
-                        }
-                    }, function (data) {
-                        vm.staffList = data.list;
-                    });
+                    // Fallback using fetchMembers mock for demo
+                    if(!vm.positionList.length) vm.fetchMembers('9999'); 
                 },
                 searchDetail : function () {
                     var vm = this;
-
                     if(vm.constntNm == ''){
-                        vm._alert("검색어를 입력해주세요<br/>Input the search term.");
+                        alert("검색어를 입력해주세요");
                         return;
                     }
-                    
                     comm.post({
                         url: "./searchDetailStaffList2.do",
-                        dataType: "json",
-                        params: {
-                            'constntNm' : vm.constntNm,
-                            'searchType' : vm.searchType
-                        }
+                        params: { 'constntNm' : vm.constntNm }
                     }, function (data) {
                         vm.staffList = data.list;
                         vm.searchPerformed = true;
@@ -244,54 +508,27 @@
                     this.selectedIndex = index;
                 },
                 swipeIndex : function (status){
-                    var vm = this;
-                    if(status == "plus"){
-                        vm.selectedIndex = vm.selectedIndex +1;
-                        $('.index_wrap').scrollLeft(39 * vm.selectedIndex);
-                    }else {
-                        vm.selectedIndex = vm.selectedIndex -1;
-                        $('.index_wrap').scrollLeft(39 * vm.selectedIndex -1);
-                    }
-
-                    window.scrollTo({ top: 0, behavior: 'smooth' });
-                    vm.getIndexList(vm.selectedIndex);
+                   // 단순화
+                   if(status == "plus" && this.selectedIndex < 13) this.selectedIndex++;
+                   else if(status == "minus" && this.selectedIndex > 0) this.selectedIndex--;
+                   this.getIndexList(this.selectedIndex);
                 },
                 getIndexList : function (index){
                     var vm = this;
                     var item = vm.indexItem[index];
                     comm.post({
                         url: "./getIndexList.do",
-                        dataType: "json",
-                        params: {
-                            'choSungIndex' : item.num
-                        }
+                        params: { 'choSungIndex' : item.num }
                     }, function (data) {
-                        window.scrollTo({ top: 0, behavior: 'smooth' });
-                        vm.selectedIndex = index;
+                         vm.selectedIndex = index;
                         vm.indexList = data.list;
                     });
                 },
                 searchIndex(constntNo) {
                     var vm = this;
-                    vm.constntNm = '';
-                    vm.ogdpDeptCd = '';
-                    vm.selectDeptNm = '';
-                    vm.oneDept = '';
-                    vm.twoDeptList = [];
-                    vm.thrDeptList = [];
                     vm.constntNo = constntNo;
-                    vm.search();
-                },
-                searchNode(deptCd, deptNm) {
-                    var vm = this;
-                    vm.constntNm = '';
-                    vm.constntNo = '';
-                    vm.oneDept = '';
-                    vm.twoDeptList = [];
-                    vm.thrDeptList = [];
-                    vm.ogdpDeptCd = deptCd;
-                    vm.selectDeptNm = deptNm;
-                    vm.search();
+                    vm.activeTabIndex = 2; // 상세검색 탭으로 이동
+                    vm.searchDetail(); // 검색 실행
                 },
                 scrollToTop() {
                     window.scrollTo({ top: 0, behavior: 'smooth' });
@@ -300,143 +537,80 @@
                     window.scrollTo({ top: document.body.scrollHeight, behavior: 'smooth' });
                 },
                 toggleNode: function (deptCd) {
-                    // 총장 클릭 시 별도 처리
                     if (deptCd === "00000") {
                         const isActive = !this.activeNodes[deptCd];
-                        Vue.set(this.activeNodes, deptCd, isActive);
-
-                        if (isActive) {
-                            this.getPresidentInfo(deptCd);
-                        }
+                        this.$set(this.activeNodes, deptCd, isActive);
+                        if (isActive) this.getPresidentInfo(deptCd);
                         return;
                     }
-
-                    // 일반 부서 클릭 시 기존 로직 유지
                     const isActive = !this.activeNodes[deptCd];
-                    Vue.set(this.activeNodes, deptCd, isActive);
-
+                    this.$set(this.activeNodes, deptCd, isActive);
                     if (isActive) {
                         this.fetchMembers(deptCd);
                     }
                 },
                 isActiveNode: function (nodeId) {
-                    // 노드가 활성화되어 있는지 확인
                     return !!this.activeNodes[nodeId];
                 },
                 openAllNodes() {
-                    //총장도 열기
                     this.$set(this.activeNodes, "00000", true);
-                    this.orgDeptList.forEach(node => {
-                        this.$set(this.activeNodes, node.deptCd, true);
-                        if (node.children && node.children.length) {
-                            node.children.forEach(child => {
-                                this.$set(this.activeNodes, child.deptCd, true);
-                            });
-                        }
-                    });
+                    // 재귀적으로 모든 노드 열기 구현 필요하나 프로토타입에선 1뎁스만
+                    if(this.orgDeptList) {
+                        this.orgDeptList.forEach(node => {
+                            this.$set(this.activeNodes, node.deptCd, true);
+                        });
+                    }
                 },
                 closeAllNodes() {
-                    // this.activeNodes = {};
-                    location.reload();
+                    this.activeNodes = {};
                 },
                 setActiveTab(index) {
                     this.activeTabIndex = index;
                 },
                 getOneDeptList : function (){
                     var vm = this;
-                    comm.post({
-                        url: "./getOneDeptList.do",
-                        dataType: "json",
-                        params: {}
-                    }, function (data) {
+                    comm.post({ url: "./getOneDeptList.do", params: {} }, function (data) {
                         vm.oneDeptList = data.list;
                     });
                 },
                 getDeptList : function (lv , deptCd){
                     var vm = this;
-                    if(deptCd == ''){
-                        //재선택 시 초기화
+                    if(deptCd == '') return;
+                    
+                    comm.post({
+                        url: "./getDeptList.do",
+                        params: { 'lv' : lv ,'upDeptCd' : deptCd }
+                    }, function (data) {
                         if(lv == 4){
-                            vm.twoDept = '';
-                            vm.thrDept = '';
-                            vm.twoDeptList = [];
-                            vm.thrDeptList = [];
-                        }else if(lv == 5){
-                            vm.thrDept = '';
-                            vm.thrDeptList = [];
+                            vm.twoDeptList = data.list;
                         }
-                    }else {
-                        //재선택 시 초기화
-                        if(lv == 4){
-                            vm.twoDept = '';
-                            vm.thrDept = '';
-                            vm.twoDeptList = [];
-                            vm.thrDeptList = [];
-                        }else if(lv == 5){
-                            vm.thrDept = '';
-                            vm.thrDeptList = [];
-                        }
-                        comm.post({
-                            url: "./getDeptList.do",
-                            dataType: "json",
-                            params: {
-                                'lv' : lv
-                                ,'upDeptCd' : deptCd
-                            }
-                        }, function (data) {
-                            if(lv == 3){
-                                vm.oneDeptList = data.list;
-                            }else if(lv == 4){
-                                vm.twoDeptList = data.list;
-                            }else if(lv == 5){
-                                vm.thrDeptList = data.list;
-                            }
-                        });
-                    }
+                    });
                 },
                 getPresidentInfo(deptCd) {
                     var vm = this;
-                    console.log("총장정보 : " + deptCd);
-                    try {
-                        comm.post({
-                            url: "./getPresidentInfo.do",
-                            dataType: "json",
-                            params: {
-                                'ogdpDeptCd' : deptCd
-                            }
-                        }, function (data) {
-                            vm.president = data.info;
-                            console.log(vm.president);
-                        });
-                    } catch (error) {
-                        console.error('Error fetching members:', error);
-                    }
+                    comm.post({
+                        url: "./getPresidentInfo.do",
+                        params: { 'ogdpDeptCd' : deptCd }
+                    }, function (data) {
+                        vm.president = data.info;
+                    });
                 },
                 async fetchMembers(deptCd) {
                     var vm = this;
-                    console.log("뎁시디 : " + deptCd);
-                    try {
-                        await comm.post({
-                            url: "./fetchMembers.do",
-                            dataType: "json",
-                            params: {
-                                'ogdpDeptCd' : deptCd
-                            }
-                        }, function (data) {
-                            const members = data.list;
-
-                            vm.updateMembers(deptCd, members);
-                        });
-                    } catch (error) {
-                        console.error('Error fetching members:', error);
-                    }
+                    // Mock delay
+                    await comm.post({
+                        url: "./fetchMembers.do",
+                        params: { 'ogdpDeptCd' : deptCd }
+                    }, function (data) {
+                        vm.updateMembers(deptCd, data.list);
+                    });
                 },
                 updateMembers(deptCd, members) {
                     var vm = this;
                     const updateNodeMembers = (nodes) => {
-                    nodes.forEach(node => {
+                        nodes.forEach(node => {
                             if (node.deptCd === deptCd) {
-                                this.$set(node, 'members', members);
+                                vm.$set(node, 'members', members);
                             } else if (node.children) {
                                 updateNodeMembers(node.children);
                             }
@@ -444,964 +618,47 @@
                     };
                     updateNodeMembers(vm.orgDeptList);
                 },
-                nextDeptMember: function (node, parentNodes) {
-                    const currentNodeIndex = parentNodes.findIndex(n => n.deptCd === node.deptCd);
-                    if (currentNodeIndex !== -1 && currentNodeIndex < parentNodes.length - 1) {
-                        const nextNode = parentNodes[currentNodeIndex + 1];
-                        this.toggleNode(nextNode.deptCd);
-                        this.toggleNode(node.deptCd);
-                    }
-                },
                 _mask: function (val, type) {
-					if(val != null){
-						var reVal = util.maks(val, type);
-					}else {
-						var reVal = val;
-					}
-				    return reVal;
-				},
+                    return util.maks(val, type);
+                },
                 _subString : function(val) {
-                    if(val != null){
-						var reVal = val.substring(0,4);
-					}else {
-						var reVal = val;
-					}
-				    return reVal;
+                    return val ? val.substring(0,4) : val;
                 },
                 _sliceTel : function(val) {
-                    if(val != null){
-                        if(val.length > 3)
-						var reVal = val.slice(-4);
-					}else {
-						var reVal = "-";
-					}
-				    return reVal;
-                },
-                _sliceMajor : function(val) {
-                    if(val != null){
-                        if(val.length > 10){
-                            var reVal = val.slice(0,10);
-                        }else{
-                            var reVal = val;
-                        }
-					}else {
-						var reVal = val;
-					}
-				    return reVal;
-                },
-                goStaffConfig : function (){
-                    location.href = "../config/staffConfig.do";
+                    return val ? (val.length > 3 ? val.slice(-4) : val) : "-";
                 },
                 copyEmail(email) {
-                    // 클립보드에 텍스트 복사
-                    navigator.clipboard.writeText(email).then(() => {
-                        vm._alert('이메일 주소가 클립보드에 복사되었습니다: ' + email + '<br/><br/>The mail address was copied to the clipboard: ' + email);
-                    }).catch(err => {
-                        vm._alert('클립보드에 복사하는 동안 오류가 발생했습니다.<br/>An error occurred while copying to the clipboard.');
-                    });
+                    alert("클립보드 복사(시뮬레이션): " + email);
                 },
                 majorPopModal(member) {
-                    console.log("팝모달들어옴");
                     var vm = this;
-                    
-                    if(vm.isMajorViewVisible){
+                    if(vm.isMajorViewVisible && !member){
                         vm.isMajorViewVisible = false;
-                        vm.srngDetailMjrTitle = '';
-                        vm.srngDetailMjrNm = '';
-                        vm.popModalDetailNm = '';
-                        vm.popModalDetailPosi = '';
-                        vm.popModalDetailDept = '';
-                        document.body.classList.remove("hidden");
                     }else {
                         vm.isMajorViewVisible = true;
-                        if(member.userDivcdNm == '교원'){
-                            vm.srngDetailMjrTitle = '전공분야';
-                            vm.srngDetailMjrNm = member.srngDetailMjrNm;
-                        }else {
-                            vm.srngDetailMjrTitle = '담당업무';
-                            vm.srngDetailMjrNm = member.taskFldNm;
+                        if(member){
+                            vm.srngDetailMjrTitle = member.userDivcdNm == '교원' ? '전공분야' : '담당업무';
+                            vm.srngDetailMjrNm = member.userDivcdNm == '교원' ? member.srngDetailMjrNm : member.taskFldNm;
+                            vm.popModalDetailNm = member.constntNm;
+                            vm.popModalDetailPosi = member.jbttlCdNm || member.userDivcdNm;
+                            vm.popModalDetailDept = member.deptNm || member.ogdpDeptNm;
                         }
-                        
-                        vm.popModalDetailNm = member.constntNm;
-                        vm.popModalDetailPosi = member.jbttlCdNm || member.userDivcdNm;
-                        vm.popModalDetailDept = member.mjrNm || member.deptNm || member.univNm || member.ogdpDeptNm
-                        document.body.classList.add("hidden");
                     }
-                },
-                getWiseMenuAply : function(){
-                    //대학행정 프로필 관리 쪽 랜딩 페이지 바인딩
-                    var vm = this;
-                    var aplyName = "";
-                    comm.post({
-                        url: "../cmSess/getMenuGrpId.do",
-                        dataType: "json",
-                        params: {}
-                    }, function (data) {
-                        console.log(data.menuGrpId);
-                        if (data.status == "success"){
-                            if(data.menuGrpId == 'CCMN000.940'){ //직원
-                                aplyName = "mAapsIndvdlProflMng_2";
-                            }else if(data.menuGrpId == 'CCMN000.931'){ //비전임교원
-                                aplyName = "mAapsIndvdlProflMng_5";
-                            }else if(data.menuGrpId == 'CCMN000.930'){ //전임교원
-                                aplyName = "mAapsIndvdlProflMng_4";
-                            }else if(data.menuGrpId == 'CCMN000.960'){ //조교
-                                aplyName = "mAapsIndvdlProflMng_3";
-                            }else {
-                                aplyName = "메뉴없음";
-                            }
-                        }
-                        vm.wiseMenuId = aplyName;
-                        console.log("vm.wiseMenuId : " + vm.wiseMenuId);
-                    });
-
-                    
                 },
                 goProfileConfig : function() {
-                    var vm = this;
-                    var domain = $(location).attr("origin");
-                    var enc = "";
-                    var aplyName = "";
-
-                    if(vm.menuGrpId == 'CCMN000.940'){ //직원
-                        aplyName = "mAapsIndvdlProflMng_2";
-                    }else if(vm.menuGrpId == 'CCMN000.931'){ //비전임교원
-                        aplyName = "mAapsIndvdlProflMng_5";
-                    }else if(vm.menuGrpId == 'CCMN000.930'){ //전임교원
-                        aplyName = "mAapsIndvdlProflMng_4";
-                    }else if(vm.menuGrpId == 'CCMN000.960'){ //조교
-                        aplyName = "mAapsIndvdlProflMng_3";
-                    }else {
-                        aplyName = "메뉴없음";
-                    }
-
-                    vm.wiseMenuId = aplyName;
-
-                    if(vm.wiseMenuId != "메뉴없음"){
-                        enc = btoa("/mob/exsignon/sso/sso_assert.jsp?ssoOption=assert&targetId=wise&loginId=${session.encConstntNo}&RelayState=/exsignon/sso/sso_index.jsp?menuid="+vm.wiseMenuId);
-                    }else {
-                        enc = btoa("/mob/exsignon/sso/sso_assert.jsp?ssoOption=assert&targetId=wise&loginId=${session.encConstntNo}&RelayState=/exsignon/sso/sso_index.jsp");
-                    }
-                    var url = domain + "/mob/exsignon/sso/logout.jsp?RelayState="+enc;
-                    console.log("profile URL : " + url);
-
-                    goOpenBrowser(url);
+                    alert("설정 페이지 이동");
                 },
                 emptyCheck : function(value){
-                    var emptyCheck = false;
-                    if (value === null || value === undefined || value === '' || value === ' ' || value === '  ') {
-                        emptyCheck = true;
-                    } else {
-                        emptyCheck = false;
-                    }
-                    return emptyCheck;
+                    return (value === null || value === undefined || value === '' || value === ' ');
                 },
             }
         });
-
-        /* select 선택 시 폰트색상 변경 */
-        $(document).on('change', '.search_form .srch_input_box select', function(){
-            $(this).css('color', '#333').css('font-weight', '500');
-        })
-
-        /*상세검색 > 하단 상세정보 열고닫기*/
-        $(document).on('click', '.detail_btn', function(){
-            var display = $(this).parent().find(".bottom").css('display');
-
-            if(display == 'none'){
-                $(this).parent().find(".bottom").slideDown(200);
-                $(this).addClass('on');
-            }else{
-                $(this).parent().find(".bottom").slideUp(200);
-                $(this).removeClass('on');
-            }
-        })
     };
-    
 
-        
-    //전공분야 팝업
-    // function majorPopModal() {
-    //     $("#major_view").show();
-    //     $("body").addClass("hidden");
-    // }
+    // 실행
+    $(document).ready(function(){
+        documentReady();
+    });
 </script>
-
-<div id="container" class="container">
-    <!--content-->
-    <div id="content" v-cloak class="staffnote">
-        <!-- <div class="h3_box">
-            <h2>교직원수첩</h2>
-        </div> -->
-
-        <!--vue 탭으로 변경-->
-        <ul class="tab_wrap tab-script">
-            <li v-for="(tab, index) in tabs" :key="index" :class="{ 'on': activeTabIndex === index }">
-                <a href="#" @click.prevent="setActiveTab(index)">
-                    <span v-if="language == 'ENG'">{{ tab.enName }}</span>
-                    <span v-else>{{ tab.name }}</span>
-                </a>
-            </li>
-        </ul>
-        <div class="cont-tabwrap">
-            <!-- 조직도 -->
-            <div class="cont-tabbox" :class="{ 'on': activeTabIndex === 0 }">
-                <div class="search_form_wrap">
-                    <div class="sticky_wrap">
-                        <div class="top_bn_btn" @click="goProfileConfig()">
-                            <p>교직원수첩 공개정보 수정</p>
-                            <span>* 정보 수정이 필요할 경우 클릭해주세요.</span>
-                        </div>
-                    </div>
-                </div>
-                <div class="inner org_chart">
-                    <div class="top_depth">
-                        서울시립대학교
-                    </div>
-                   <div class="all_btn_wrap">
-                        <ul>
-                            <li class="all_close" @click="closeAllNodes()"><p><span class="sr-only">전체닫기아이콘</span></p><span>${paramMap.multiLanguage == 'ENG' ? 'All Close' : '전체닫기'}</span></li>
-                            <li class="all_open" @click="openAllNodes()"><p><span class="sr-only">전체열기아이콘</span></p><span>${paramMap.multiLanguage == 'ENG' ? 'All Open' : '전체열기'}</span></li>
-                        </ul>
-                    </div>
-                    <ul v-show="orgDeptList">
-                        <li class="president-node">
-                            <div class="tree-node depth1" 
-                                 :class="{ active: isActiveNode('00000') }" 
-                                 @click="toggleNode('00000')">
-                                총장
-                            </div>
-                        
-                            <!-- 총장 정보 표시 -->
-                            <ul v-if="president" v-show="isActiveNode('00000')" class="list_wrap box sty2" style="margin-top: 0px;">
-                                <li class="staff_cont">
-                                    <div class="top">
-                                        <p>
-                                            <img v-if="president.photoFilePath == ''" src="/mob/images/common/org_detail_profile.png" alt="기본프로필이미지">
-                                            <img v-if="president.photoFilePath != ''" :src="president.photoFilePath" alt="기본프로필이미지" onerror="this.src='/mob/images/common/org_detail_profile.png'">
-                                        </p>
-                                        <div>
-                                            <div class="name"><strong>{{president.constntNm}}</strong> </div>
-                                            <span>{{president.jbttlCdNm ? president.jbttlCdNm : president.userDivcdNm}} · {{president.mjrNm ? president.mjrNm : president.deptNm ? president.deptNm : president.univNm ? president.univNm : president.ogdpDeptNm}}</span>
-                                        </div>
-                                        <div class="s_info">
-                                            <!-- 24.04.17 pub: 휴대폰 마스킹됐을경우 mask 클래스 추가 -->
-                                            <a :href="'tel:'+president.cryalTelNo" class="tel_link"><span>휴대폰연결</span></a>
-        
-                                            <dl>
-                                                <dt>내선번호</dt>
-                                                <dd>
-                                                    <a v-if="!emptyCheck(president.jbttlCd) && !emptyCheck(president.jbttlPremisTelno)" :href="'tel:026490'+_sliceTel(president.jbttlPremisTelno)"><span class="underln">{{_sliceTel(president.jbttlPremisTelno)}}</span></a>
-                                                    <a v-else-if="emptyCheck(president.jbttlCd) && !emptyCheck(president.premisTelno)" :href="'tel:026490'+_sliceTel(president.premisTelno)"><span class="underln">{{_sliceTel(president.premisTelno)}}</span></a>
-                                                    <a v-else ><span>-</span></a>
-                                                </dd>
-                                            </dl>
-                                        </div>
-                                    </div>
-                                    <div class="bottom">
-                                        <div>
-                                            <dl class="year" v-show="president.userDivcdNm != '직원'">
-                                                <dt>출생년도</dt>
-                                                <dd>
-                                                    <span v-if="president.staffBirthYn == 'N'"><!--{{president.selfBrdt.substring(0,3) + '***' + president.selfBrdt.substring(6,8)}}-->미제공</span>
-                                                    <span v-if="president.staffBirthYn != 'N'">{{_subString(president.selfBrdt)}}</span>
-                                                </dd>
-                                            </dl>
-                                            <dl>
-                                                <dt>
-                                                    {{ president.jbttlCd != null 
-                                                        ? '사무실' 
-                                                        : (president.userDivcdNm == '교원' || president.userDivcdNm == '강사' ? '연구실' : '사무실') }}
-                                                </dt>
-                                                <dd>
-                                                    <span v-if="!emptyCheck(president.jbttlCd)">{{emptyCheck(president.jbttlLaboratory) ? '-' : president.jbttlLaboratory}}</span>
-                                                    <span v-else>{{emptyCheck(president.laboratory) ? '-' : president.laboratory}}</span>
-                                                </dd>
-                                            </dl>
-                                            <dl>
-                                                <dt>학내웹메일</dt>
-                                                <dd>
-                                                    <span class="mail" v-if="!emptyCheck(president.jbttlCd)">{{president.jbttlEmail}} <button @click="copyEmail(president.jbttlEmail)" class="copy_btn">복사하기</button></span>
-                                                    <span class="mail" v-else-if="emptyCheck(president.jbttlCd) && !emptyCheck(president.email)">{{president.email}} <button @click="copyEmail(president.email)" class="copy_btn">복사하기</button></span>
-                                                    <span class="mail" v-else>-</span>
-                                                </dd>
-                                            </dl>
-                                        </div>
-                                    </div>
-                                    <a href="#" v-show="(president.userDivcdNm === '교원' ? (president.jbttlCd == null && president.srngDetailMjrNm) : president.taskFldNm)" class="major_view" @click="majorPopModal(president);">
-                                        <span>{{president.userDivcdNm == '교원' ? '전공분야' : '담당업무'}}</span>
-                                        <p>{{president.userDivcdNm == '교원' ? president.srngDetailMjrNm : president.taskFldNm}}</p>
-                                    </a>
-                                    <button class="detail_btn"><span class="sr-only">상세정보 열기닫기</span></button>
-                                </li>
-                            </ul>
-                        </li>
-                        <li v-for="node in orgDeptList" :key="node.deptCd">
-                            <div class="tree-node depth1" :class="{ active: isActiveNode(node.deptCd), 'no_depth' : !emptyCheck(node.children) && !node.children.length }" @click="toggleNode(node.deptCd)">
-                                {{ node.deptNm }}
-                            </div>
-
-                            <!-- 2단계 노드 -->
-                            <ul v-if="node.children && node.children.length" v-show="isActiveNode(node.deptCd)">
-                                <!-- 부서에 속한 사람 정보 표시 -->
-                                <li v-show="node.members && node.members.length">
-                                    <!-- [pub] 06.10 기존 개발 코드 주석처리
-                                    <div>
-                                        <p @click="nextDeptMember(node, orgDeptList)">다음 조직 보기</p>
-                                    </div> 
-                                    <ul>
-                                        <li v-for="member in node.members" :key="member.constntNo">
-                                            {{ member.constntNm }} / 보직 : <span>{{member.jbttlCdNm}} · {{member.jbttlDept}}</span>
-                                        </li>
-                                    </ul>
-                                    -->
-                                    <ul class="list_wrap box sty2">
-                                        <li v-for="(member, idx) in node.members" :key="idx" class="staff_cont">
-                                            <div class="top">
-                                                <p>
-                                                    <img v-if="member.photoFilePath == ''" src="/mob/images/common/org_detail_profile.png" alt="기본프로필이미지">
-                                                    <img v-if="member.photoFilePath != ''" :src="member.photoFilePath" alt="기본프로필이미지" onerror="this.src='/mob/images/common/org_detail_profile.png'">
-                                                </p>
-                                                <div>
-                                                    <div class="name"><strong>{{member.constntNm}}</strong> </div>
-                                                    <span>{{member.jbttlCdNm ? member.jbttlCdNm : member.userDivcdNm}} · {{member.mjrNm ? member.mjrNm : member.deptNm ? member.deptNm : member.univNm ? member.univNm : member.ogdpDeptNm}}</span>
-                                                </div>
-                                                <div class="s_info">
-                                                    <!-- 24.04.17 pub: 휴대폰 마스킹됐을경우 mask 클래스 추가 -->
-                                                    <a :href="'tel:'+member.cryalTelNo" class="tel_link"><span>휴대폰연결</span></a>
-                
-                                                    <dl>
-                                                        <dt>내선번호</dt>
-                                                        <dd>
-                                                            <a v-if="!emptyCheck(member.jbttlCd) && !emptyCheck(member.jbttlPremisTelno)" :href="'tel:026490'+_sliceTel(member.jbttlPremisTelno)"><span class="underln">{{_sliceTel(member.jbttlPremisTelno)}}</span></a>
-                                                            <a v-else-if="emptyCheck(member.jbttlCd) && !emptyCheck(member.premisTelno)" :href="'tel:026490'+_sliceTel(member.premisTelno)"><span class="underln">{{_sliceTel(member.premisTelno)}}</span></a>
-                                                            <a v-else ><span>-</span></a>
-                                                        </dd>
-                                                    </dl>
-                                                </div>
-                                            </div>
-                                            <div class="bottom">
-                                                <div>
-                                                    <dl class="year" v-show="member.userDivcdNm != '직원'">
-                                                        <dt>출생년도</dt>
-                                                        <dd>
-                                                            <span v-if="member.staffBirthYn == 'N'"><!--{{member.selfBrdt.substring(0,3) + '***' + member.selfBrdt.substring(6,8)}}-->미제공</span>
-                                                            <span v-if="member.staffBirthYn != 'N'">{{_subString(member.selfBrdt)}}</span>
-                                                        </dd>
-                                                    </dl>
-                                                    <dl>
-                                                        <dt>
-                                                            {{ member.jbttlCd != null 
-                                                                ? '사무실' 
-                                                                : (member.userDivcdNm == '교원' || member.userDivcdNm == '강사' ? '연구실' : '사무실') }}
-                                                        </dt>
-                                                        <dd>
-                                                            <span v-if="!emptyCheck(member.jbttlCd)">{{emptyCheck(member.jbttlLaboratory) ? '-' : member.jbttlLaboratory}}</span>
-                                                            <span v-else>{{emptyCheck(member.laboratory) ? '-' : member.laboratory}}</span>
-                                                        </dd>
-                                                    </dl>
-                                                    <dl>
-                                                        <dt>학내웹메일</dt>
-                                                        <dd>
-                                                            <span class="mail" v-if="!emptyCheck(member.jbttlCd)">{{member.jbttlEmail}} <button @click="copyEmail(member.jbttlEmail)" class="copy_btn">복사하기</button></span>
-                                                            <span class="mail" v-else-if="emptyCheck(member.jbttlCd) && !emptyCheck(member.email)">{{member.email}} <button @click="copyEmail(member.email)" class="copy_btn">복사하기</button></span>
-                                                            <span class="mail" v-else>-</span>
-                                                        </dd>
-                                                    </dl>
-                                                </div>
-                                            </div>
-                                            <a href="#" v-show="(member.userDivcdNm === '교원' ? (member.jbttlCd == null && member.srngDetailMjrNm) : member.taskFldNm)" class="major_view" @click="majorPopModal(member);">
-                                                <span>{{member.userDivcdNm == '교원' ? '전공분야' : '담당업무'}}</span>
-                                                <p>{{member.userDivcdNm == '교원' ? member.srngDetailMjrNm : member.taskFldNm}}</p>
-                                            </a>
-                                            <button class="detail_btn"><span class="sr-only">상세정보 열기닫기</span></button>
-                                        </li>
-                                    </ul>
-                                </li>
-                                <li v-for="child in node.children" :key="child.deptCd">
-                                    <div class="tree-node depth2" :class="{ active: isActiveNode(child.deptCd) , 'no_depth' : !child.children.length}" @click="toggleNode(child.deptCd)">
-                                        {{ child.deptNm }}
-                                    </div>
-                                    <!-- 3단계 노드 -->
-                                    <ul v-show="isActiveNode(child.deptCd)">
-                                        <!-- 부서에 속한 사람 정보 표시 -->
-                                        <div v-show="child.members && child.members.length">
-                                            <!-- <div>
-                                                <p @click="nextDeptMember(child, node.children)">다음 조직 보기</p>
-                                            </div>
-                                            <ul>
-                                                <li v-for="member in child.members" :key="member.constntNo">{{ member.constntNm }} / 보직 : <span>{{member.jbttlCdNm}} · {{member.jbttlDept}}</span></li>
-                                            </ul> -->
-
-                                            <ul class="list_wrap box sty2">
-                                                <li v-for="(member,idx) in child.members" :key="idx" class="staff_cont">
-                                                    <div class="top">
-                                                        <p>
-                                                            <img v-if="member.photoFilePath == ''" src="/mob/images/common/org_detail_profile.png" alt="기본프로필이미지">
-                                                            <img v-if="member.photoFilePath != ''" :src="member.photoFilePath" alt="기본프로필이미지" onerror="this.src='/mob/images/common/org_detail_profile.png'">
-                                                        </p>
-                                                        <div>
-                                                            <div class="name"><strong>{{member.constntNm}}</strong> </div>
-                                                            <span>{{member.jbttlCdNm ? member.jbttlCdNm : member.userDivcdNm}} · {{member.mjrNm ? member.mjrNm : member.deptNm ? member.deptNm : member.univNm ? member.univNm : member.ogdpDeptNm}}</span>
-                                                        </div>
-                                                        <div class="s_info">
-                                                            <!-- 24.04.17 pub: 휴대폰 마스킹됐을경우 mask 클래스 추가 -->
-                                                            <a :href="'tel:'+member.cryalTelNo" class="tel_link"><span>휴대폰연결</span></a>
-                        
-                                                            <dl>
-                                                                <dt>내선번호</dt>
-                                                                <dd>
-                                                                    <a v-if="!emptyCheck(member.jbttlCd) && !emptyCheck(member.jbttlPremisTelno)" :href="'tel:026490'+_sliceTel(member.jbttlPremisTelno)"><span class="underln">{{_sliceTel(member.jbttlPremisTelno)}}</span></a>
-                                                                    <a v-else-if="emptyCheck(member.jbttlCd) && !emptyCheck(member.premisTelno)" :href="'tel:026490'+_sliceTel(member.premisTelno)"><span class="underln">{{_sliceTel(member.premisTelno)}}</span></a>
-                                                                    <a v-else ><span>-</span></a>
-                                                                </dd>
-                                                            </dl>
-                                                        </div>
-                                                    </div>
-                                                    <div class="bottom">
-                                                        <div>
-                                                            <dl class="year" v-show="member.userDivcdNm != '직원'">
-                                                                <dt>출생년도</dt>
-                                                                <dd>
-                                                                    <span v-if="member.staffBirthYn == 'N'"><!--{{member.selfBrdt.substring(0,3) + '***' + member.selfBrdt.substring(6,8)}}-->미제공</span>
-                                                                    <span v-if="member.staffBirthYn != 'N'">{{_subString(member.selfBrdt)}}</span>
-                                                                </dd>
-                                                            </dl>
-                                                            <dl>
-                                                                <dt>
-                                                                    {{ member.jbttlCd != null 
-                                                                        ? '사무실' 
-                                                                        : (member.userDivcdNm == '교원' || member.userDivcdNm == '강사' ? '연구실' : '사무실') }}
-                                                                </dt>
-                                                                <dd>
-                                                                    <span v-if="!emptyCheck(member.jbttlCd)">{{emptyCheck(member.jbttlLaboratory) ? '-' : member.jbttlLaboratory}}</span>
-                                                                    <span v-else>{{emptyCheck(member.laboratory) ? '-' : member.laboratory}}</span>
-                                                                </dd>
-                                                            </dl>
-                                                            <dl>
-                                                                <dt>학내웹메일</dt>
-                                                                <dd>
-                                                                    <span class="mail" v-if="!emptyCheck(member.jbttlCd)">{{member.jbttlEmail}} <button @click="copyEmail(member.jbttlEmail)" class="copy_btn">복사하기</button></span>
-                                                                    <span class="mail" v-else-if="emptyCheck(member.jbttlCd) && !emptyCheck(member.email)">{{member.email}} <button @click="copyEmail(member.email)" class="copy_btn">복사하기</button></span>
-                                                                    <span class="mail" v-else>-</span>
-                                                                </dd>
-                                                            </dl>
-                                                        </div>
-                                                    </div>
-                                                    <a href="#" v-show="(member.userDivcdNm === '교원' ? (member.jbttlCd == null && member.srngDetailMjrNm) : member.taskFldNm)" class="major_view" @click="majorPopModal(member);">
-                                                        <span>{{member.userDivcdNm == '교원' ? '전공분야' : '담당업무'}}</span>
-                                                        <p>{{member.userDivcdNm == '교원' ? member.srngDetailMjrNm : member.taskFldNm}}</p>
-                                                    </a>
-                                                    <button class="detail_btn"><span class="sr-only">상세정보 열기닫기</span></button>
-                                                </li>
-                                            </ul>
-                                        </div>
-                                        <li v-for="grandChild in child.children" :key="grandChild.deptCd">
-                                            <div class="tree-node depth3" :class="{ active: isActiveNode(grandChild.deptCd) }" @click="toggleNode(grandChild.deptCd)">
-                                                {{ grandChild.deptNm }}
-                                            </div>
-                                            <!-- 부서에 속한 사람 정보 표시 -->
-                                            <div v-if="grandChild.members && grandChild.members.length" v-show="isActiveNode(grandChild.deptCd)">
-                                                <!-- <div>
-                                                    <p @click="nextDeptMember(grandChild, child.children)">다음 조직 보기</p>
-                                                </div>
-                                                <ul>
-                                                    <li v-for="member in grandChild.members" :key="member.constntNo">{{ member.constntNm }} / 보직 : <span>{{member.jbttlCdNm}} · {{member.jbttlDept}}</span></li>
-                                                </ul> -->
-                                                <ul class="list_wrap box sty2">
-                                                    <li v-for="(member,idx) in grandChild.members" :key="idx" class="staff_cont">
-                                                        <div class="top">
-                                                            <p>
-                                                                <img v-if="member.photoFilePath == ''" src="/mob/images/common/org_detail_profile.png" alt="기본프로필이미지">
-                                                                <img v-if="member.photoFilePath != ''" :src="member.photoFilePath" alt="기본프로필이미지" onerror="this.src='/mob/images/common/org_detail_profile.png'">
-                                                            </p>
-                                                            <div>
-                                                                <div class="name"><strong>{{member.constntNm}}</strong> </div>
-                                                                <span>{{member.jbttlCdNm ? member.jbttlCdNm : member.userDivcdNm}} · {{member.mjrNm ? member.mjrNm : member.deptNm ? member.deptNm : member.univNm ? member.univNm : member.ogdpDeptNm}}</span>
-                                                            </div>
-                                                            <div class="s_info">
-                                                                <!-- 24.04.17 pub: 휴대폰 마스킹됐을경우 mask 클래스 추가 -->
-                                                                <a :href="'tel:'+member.cryalTelNo" class="tel_link"><span>휴대폰연결</span></a>
-                            
-                                                                <dl>
-                                                                    <dt>내선번호</dt>
-                                                                    <dd>
-                                                                        <a v-if="!emptyCheck(member.jbttlCd) && !emptyCheck(member.jbttlPremisTelno)" :href="'tel:026490'+_sliceTel(member.jbttlPremisTelno)"><span class="underln">{{_sliceTel(member.jbttlPremisTelno)}}</span></a>
-                                                                        <a v-else-if="emptyCheck(member.jbttlCd) && !emptyCheck(member.premisTelno)" :href="'tel:026490'+_sliceTel(member.premisTelno)"><span class="underln">{{_sliceTel(member.premisTelno)}}</span></a>
-                                                                        <a v-else ><span>-</span></a>
-                                                                    </dd>
-                                                                </dl>
-                                                            </div>
-                                                        </div>
-                                                        <div class="bottom">
-                                                            <div>
-                                                                <dl class="year" v-show="member.userDivcdNm != '직원'">
-                                                                    <dt>출생년도</dt>
-                                                                    <dd>
-                                                                        <span v-if="member.staffBirthYn == 'N'"><!--{{member.selfBrdt.substring(0,3) + '***' + member.selfBrdt.substring(6,8)}}-->미제공</span>
-                                                                        <span v-if="member.staffBirthYn != 'N'">{{_subString(member.selfBrdt)}}</span>
-                                                                    </dd>
-                                                                </dl>
-                                                                <dl>
-                                                                    <dt>
-                                                                        {{ member.jbttlCd != null 
-                                                                            ? '사무실' 
-                                                                            : (member.userDivcdNm == '교원' || member.userDivcdNm == '강사' ? '연구실' : '사무실') }}
-                                                                    </dt>
-                                                                    <dd>
-                                                                        <span v-if="!emptyCheck(member.jbttlCd)">{{emptyCheck(member.jbttlLaboratory) ? '-' : member.jbttlLaboratory}}</span>
-                                                                        <span v-else>{{emptyCheck(member.laboratory) ? '-' : member.laboratory}}</span>
-                                                                    </dd>
-                                                                </dl>
-                                                                <dl>
-                                                                    <dt>학내웹메일</dt>
-                                                                    <dd>
-                                                                        <span class="mail" v-if="!emptyCheck(member.jbttlCd)">{{member.jbttlEmail}} <button @click="copyEmail(member.jbttlEmail)" class="copy_btn">복사하기</button></span>
-                                                                        <span class="mail" v-else-if="emptyCheck(member.jbttlCd) && !emptyCheck(member.email)">{{member.email}} <button @click="copyEmail(member.email)" class="copy_btn">복사하기</button></span>
-                                                                        <span class="mail" v-else>-</span>
-                                                                    </dd>
-                                                                </dl>
-                                                            </div>
-                                                        </div>
-                                                        <a href="#" v-show="(member.userDivcdNm === '교원' ? (member.jbttlCd == null && member.srngDetailMjrNm) : member.taskFldNm)" class="major_view" @click="majorPopModal(member);">
-                                                            <span>{{member.userDivcdNm == '교원' ? '전공분야' : '담당업무'}}</span>
-                                                            <p>{{member.userDivcdNm == '교원' ? member.srngDetailMjrNm : member.taskFldNm}}</p>
-                                                        </a>
-                                                        <button class="detail_btn"><span class="sr-only">상세정보 열기닫기</span></button>
-                                                    </li>
-                                                </ul>
-                                            </div>
-                                            <!-- 4단계 노드 4단계노드는 일반적으론 없을 거 같은데 학교랑 협의해서 결정될듯-->
-                                            <ul v-if="grandChild.children && grandChild.children.length" v-show="isActiveNode(grandChild.deptCd)">
-                                                <li v-for="greatGrandChild in grandChild.children" :key="greatGrandChild.deptCd">
-                                                    <div class="tree-node" :class="{ active: isActiveNode(greatGrandChild.deptCd) }" @click="toggleNode(greatGrandChild.deptCd)">
-                                                        {{ greatGrandChild.deptNm }}
-                                                    </div>
-                                                </li>
-                                            </ul>
-                                        </li>
-                                    </ul>
-                                </li>
-                            </ul>
-                        </li>
-                    </ul>
-                </div>
-                <div class="ctrl_btn_wrap">
-                    <!-- <a class="d_srch" href="#"><span class="sr-only">검색열기</span></a> -->
-                    <a class="scrollTop" href="#" @click="scrollToTop()"><span class="sr-only">맨위로</span></a>
-                    <a class="scrollDown" href="#" @click="scrollToBottom()"><span class="sr-only">맨밑으로</span></a>
-                </div>
-            </div>
-
-            <div class="cont-tabbox" :class="{ 'on': activeTabIndex === 1 }">
-                <div class="search_form_wrap">
-                    <div class="sticky_wrap">
-                        <div class="top_bn_btn" @click="goProfileConfig()">
-                            <p>교직원수첩 공개정보 수정</p>
-                            <span>* 정보 수정이 필요할 경우 클릭해주세요.</span>
-                        </div>
-                    </div>
-                    <div class="search_form">
-                        <dl>
-                            <dt>대학/처</dt>
-                            <dd>
-                                <div class="srch_input_box">
-                                    <span class="select">
-                                        <select v-model="oneDept" @change="getDeptList('4',$event.target.value)">
-                                            <!-- <option value="" disabled selected>선택</option> -->
-                                            <option value="">전체</option>
-                                            <option v-for="od in oneDeptList" :value="od.deptCd">{{od.deptNm}}</option>
-                                        </select>
-                                    </span>
-                                </div>
-                            </dd>
-                        </dl>
-                        <dl>
-                            <dt>부서</dt>
-                            <dd>
-                                <div class="srch_input_box">
-                                    <span class="select">
-                                        <select v-model="twoDept" @change="getDeptList('5',$event.target.value)">
-                                            <!-- <option value="" disabled selected>선택</option> -->
-                                            <option value="">전체</option>
-                                            <option v-for="td in twoDeptList" :value="td.deptCd">{{td.deptNm}}</option>
-                                        </select>
-                                    </span>
-                                </div>
-                            </dd>
-                        </dl>
-                        <!-- 
-                        2025-02-05 주석처리요청청
-                        <dl>
-                            <dt>과/학과</dt>
-                            <dd>
-                                <div class="srch_input_box">
-                                    <span class="select">
-                                        <select v-model="thrDept">
-                                            <option value="">전체</option>
-                                            <option v-for="td in thrDeptList" :value="td.deptCd">{{td.deptNm}}</option>
-                                        </select>
-                                    </span>
-                                </div>
-                            </dd>
-                        </dl> -->
-                        <dl class="search_bar_wrap a2">
-                            <dt>성명</dt>
-                            <dd>
-                                <div class="srch_input_box">
-                                    <input type="text" title="constntNm" name="constntNm" v-model="constntNm" placeholder="이름을 입력해주세요."/>
-                                </div>
-                                <a href="#" class="reset_btn" @click="reset()"><span class="sr-only">초기화</span></a>
-                                <a href="#" class="search_btn" @click="searchDetailPosition()"><span class="sr-only">검색</span></a>
-                            </dd>
-                        </dl>
-                    </div>
-                </div>
-                <div class="inner">
-                    <!--
-                        부서 검색 상단 표시용
-                        <div class="list_top" v-show="selectDeptNm != ''" style="text-align: center; margin: 5px;">
-                            <h4>{{selectDeptNm}}</h4>
-                        </div>
-                    -->
-
-                    <!-- 교수 -->
-                    <ul class="list_wrap box sty2" v-show="positionList && positionList.length > 0">
-                        <li v-for="sList in positionList" class="staff_cont">
-                            <div class="top">
-                                <p>
-                                    <!-- <img v-if="sList.photoFilePath == '' || sList.photoFilePath == '/aaps/AapsBaseDataBasic/'" src="/mob/images/common/org_detail_profile.png" alt="기본프로필이미지">
-                                    <img v-if="sList.photoFilePath != '' && sList.photoFilePath != '/aaps/AapsBaseDataBasic/'" :src="sList.photoFilePath" alt="기본프로필이미지"> -->
-                                    <img v-if="sList.photoFilePath == ''" src="/mob/images/common/org_detail_profile.png" alt="기본프로필이미지">
-                                    <img v-if="sList.photoFilePath != ''" :src="sList.photoFilePath" alt="기본프로필이미지" onerror="this.src='/mob/images/common/org_detail_profile.png'">
-                                    <!-- <img src="/mob/images/common/org_detail_profile.png" alt="기본프로필이미지"> -->
-                                </p>
-                                <div>
-                                    <div class="name"><strong>{{sList.constntNm}}</strong> </div>
-                                    <span>{{sList.jbttlCdNm}} · {{sList.jbttlDept}}</span>
-                                </div>
-                                <div class="s_info">
-                                    <!-- 24.04.17 pub: 휴대폰 마스킹됐을경우 mask 클래스 추가 -->
-                                    <a :href="'tel:'+sList.cryalTelNo" class="tel_link"><span>휴대폰연결</span></a>
-                                    
-                                    <dl>
-                                        <dt>내선번호</dt>
-                                        <dd>
-                                            <a v-if="!emptyCheck(sList.premisTelno)" :href="'tel:026490'+_sliceTel(sList.premisTelno)"><span class="underln">{{_sliceTel(sList.premisTelno)}}</span></a>
-                                            <a v-else ><span>-</span></a>
-                                        </dd>
-                                    </dl>
-                                </div>
-                            </div>
-                            <div class="bottom">
-                                <div>
-                                    <dl class="year" v-show="sList.userDivcdNm != '직원'">
-                                        <dt>출생년도</dt>
-                                        <dd>
-                                            <span v-if="sList.staffBirthYn == 'N'"><!--{{sList.selfBrdt.substring(0,3) + '***' + sList.selfBrdt.substring(6,8)}}-->미제공</span>
-                                            <span v-if="sList.staffBirthYn != 'N'">{{_subString(sList.selfBrdt)}}</span>
-                                        </dd>
-                                    </dl>
-                                    <!-- <dl>
-                                        <dt>TEL</dt>
-                                        <dd><span class="underln">{{sList.premisTelno}}</span></dd>
-                                    </dl> -->
-                                    <dl>
-                                        <dt>사무실</dt>
-                                        <dd>
-                                            <span>{{emptyCheck(sList.laboratory) ? '-' : sList.laboratory}}</span>
-                                        </dd>
-                                    </dl>
-                                    <dl>
-                                        <dt>학내웹메일</dt>
-                                        <dd>
-                                            <span class="mail" v-if="sList.staffEmailYn != 'N'">{{sList.email}} <button @click="copyEmail(sList.email)" class="copy_btn">복사하기</button></span>
-                                            <span class="mail" v-if="sList.staffEmailYn == 'N'">{{_mask(sList.email,'EMAIL')}}</span>
-                                        </dd>
-                                    </dl>
-                                </div>
-                            </div>
-                            <button class="detail_btn"><span class="sr-only">상세정보 열기닫기</span></button>
-                        </li>
-                    </ul>
-
-                    <!-- 직원 : list_wrap에 클래스 stf 추가 -->
-                    <!-- <ul class="list_wrap box sty2 stf">
-                        <li>
-                            <a href="#">
-                                <div class="top">
-                                    <div>
-                                        <div class="name"><strong>김교수</strong><p v-if="sList.constntChcrtNm != null"> / 金敎授</p><span> (1950)</span></div>
-                                        <span>교수 · 차세대반도체 소자</span>
-                                        <span class="mail">uos@uos.ac.kr</span>
-                                    </div>
-                                </div>
-                                <div class="bottom">
-                                    <dl>
-                                        <dt>TEL</dt>
-                                        <dd><span class="underln">02-1234-1234</span></dd>
-                                    </dl>
-                                    <dl>
-                                        <dt>FAX</dt>
-                                        <dd><span>02-1234-1235</span></dd>
-                                    </dl>
-                                    <dl>
-                                        <dt>H.P</dt>
-                                        <dd><span class="underln">010-5678-5678</span></dd>
-                                    </dl>
-                                </div>
-                                <button class="detail_btn"><span class="sr-only">상세정보 열기닫기</span></button>
-                            </a>
-                        </li>
-                    </ul> -->
-                    <!-- <div v-show="staffList.length > 0">
-                        <ul>
-                            <li v-for="sList in staffList">
-                                <span>{{sList.constntNm}}</span> <span v-if="sList.constntChcrtNm != null">/ {{sList.constntChcrtNm}} ({{sList.selfBrdt}})</span><br/>
-                                <span>{{sList.ogdpDeptNm}}</span>
-                            </li>
-                        </ul>
-                    </div> -->
-
-
-                    <div class="bg_wrap" v-show="emptyCheck(positionList) || positionList.length == 0">
-                        <p class="detail_srch"><span>검색어</span>에 대한 검색결과가 없습니다.</p>
-                        <p class="desc">입력한 검색어가 정확한지 확인해주세요.</p>
-                    </div>
-
-                </div>
-                <div class="ctrl_btn_wrap_left">
-                    <a class="d_srch" href="#"><span class="sr-only">검색열기</span></a>
-                </div>
-                <div class="ctrl_btn_wrap">
-                    <a class="scrollTop" href="#" @click="scrollToTop()"><span class="sr-only">맨위로</span></a>
-                    <a class="scrollDown" href="#" @click="scrollToBottom()"><span class="sr-only">맨밑으로</span></a>
-                </div>
-            </div>
-
-
-            <div class="cont-tabbox" :class="{ 'on': activeTabIndex === 2 }">
-                <div class="search_form_wrap">
-                    <div class="sticky_wrap">
-                        <div class="top_bn_btn" @click="goProfileConfig()">
-                            <p>교직원수첩 공개정보 수정</p>
-                            <span>* 정보 수정이 필요할 경우 클릭해주세요.</span>
-                        </div>
-                    </div>
-                    <div class="search_form">
-                        <dl class="search_bar_wrap a2">
-                            <dd class="no_dt">
-                                <div class="srch_input_box">
-                                    <span class="select">
-                                        <select v-model="searchType">
-                                            <!-- <option value="" disabled selected>선택</option> -->
-                                            <option value="">전체</option>
-                                            <option v-for="ss in searchSelect" :value="ss.type">{{ss.typeNm}}</option>
-                                        </select>
-                                    </span>
-                                    <input type="text" title="constntNm" name="constntNm" v-model="constntNm" placeholder="검색어를 입력하세요."/>
-                                </div>
-                                <a href="#" class="reset_btn" @click="reset()"><span class="sr-only">초기화</span></a>
-                                <a href="#" class="search_btn" @click="searchDetail()"><span class="sr-only">검색</span></a>
-                            </dd>
-                        </dl>
-                    </div>
-                </div>
-                <div class="inner">
-                    <!--
-                        부서 검색 상단 표시용
-                        <div class="list_top" v-show="selectDeptNm != ''" style="text-align: center; margin: 5px;">
-                            <h4>{{selectDeptNm}}</h4>
-                        </div>
-                    -->
-
-                    <!-- 교수 -->
-                    <ul class="list_wrap box sty2" v-show="staffList && staffList.length > 0">
-                        <li v-for="sList in staffList" class="staff_cont">
-                            <div class="top">
-                                <p>
-                                    <!-- <img v-if="sList.photoFilePath == '' || sList.photoFilePath == '/aaps/AapsBaseDataBasic/'" src="/mob/images/common/org_detail_profile.png" alt="기본프로필이미지">
-                                    <img v-if="sList.photoFilePath != '' && sList.photoFilePath != '/aaps/AapsBaseDataBasic/'" :src="sList.photoFilePath" alt="기본프로필이미지"> -->
-                                    <img v-if="sList.photoFilePath == ''" src="/mob/images/common/org_detail_profile.png" alt="기본프로필이미지">
-                                    <img v-if="sList.photoFilePath != ''" :src="sList.photoFilePath" alt="기본프로필이미지" onerror="this.src='/mob/images/common/org_detail_profile.png'">
-                                    <!-- <img src="/mob/images/common/org_detail_profile.png" alt="기본프로필이미지"> -->
-                                </p>
-                                <div>
-                                    <div class="name"><strong>{{sList.constntNm}}</strong> </div>
-                                    <span>{{sList.jbttlCdNm ? sList.jbttlCdNm : sList.userDivcdNm}} · {{sList.mjrNm ? sList.mjrNm : sList.deptNm ? sList.deptNm : sList.univNm ? sList.univNm : sList.ogdpDeptNm}}</span>
-                                </div>
-                                <div class="s_info">
-                                    <!-- 24.04.17 pub: 휴대폰 마스킹됐을경우 mask 클래스 추가 -->
-                                    <a :href="'tel:'+sList.cryalTelNo" class="tel_link"><span>휴대폰연결</span></a>
-
-                                    <dl>
-                                        <dt>내선번호</dt>
-                                        <dd>
-                                            <a v-if="!emptyCheck(sList.jbttlCd) && !emptyCheck(sList.jbttlPremisTelno)" :href="'tel:026490'+_sliceTel(sList.jbttlPremisTelno)"><span class="underln">{{_sliceTel(sList.jbttlPremisTelno)}}</span></a>
-                                            <a v-else-if="emptyCheck(sList.jbttlCd) && !emptyCheck(sList.premisTelno)" :href="'tel:026490'+_sliceTel(sList.premisTelno)"><span class="underln">{{_sliceTel(sList.premisTelno)}}</span></a>
-                                            <a v-else ><span>-</span></a>
-                                        </dd>
-                                    </dl>
-                                </div>
-                            </div>
-                            <div class="bottom">
-                                <div>
-                                    <dl class="year" v-show="sList.userDivcdNm != '직원'">
-                                        <dt>출생년도</dt>
-                                        <dd>
-                                            <span v-if="sList.staffBirthYn == 'N'"><!--{{sList.selfBrdt.substring(0,3) + '***' + sList.selfBrdt.substring(6,8)}}-->미제공</span>
-                                            <span v-if="sList.staffBirthYn != 'N'">{{_subString(sList.selfBrdt)}}</span>
-                                        </dd>
-                                    </dl>
-                                    <dl>
-                                        <dt>
-                                            {{ sList.jbttlCd != null 
-                                                ? '사무실' 
-                                                : (sList.userDivcdNm == '교원' || sList.userDivcdNm == '강사' ? '연구실' : '사무실') }}
-                                        </dt>
-                                        <dd>
-                                            <span v-if="!emptyCheck(sList.jbttlCd)">{{emptyCheck(sList.jbttlLaboratory) ? '-' : sList.jbttlLaboratory}}</span>
-                                            <span v-else>{{emptyCheck(sList.laboratory) ? '-' : sList.laboratory}}</span>
-                                        </dd>
-                                    </dl>
-                                    <!-- <dl>
-                                        <dt>TEL</dt>
-                                        <dd><span class="underln">{{sList.premisTelno}}</span></dd>
-                                    </dl> -->
-                                    <dl>
-                                        <dt>학내웹메일</dt>
-                                        <dd>
-                                            <span class="mail" v-if="!emptyCheck(sList.jbttlCd)">{{sList.jbttlEmail}} <button @click="copyEmail(sList.jbttlEmail)" class="copy_btn">복사하기</button></span>
-                                            <span class="mail" v-else-if="emptyCheck(sList.jbttlCd) && !emptyCheck(sList.email)">{{sList.email}} <button @click="copyEmail(sList.email)" class="copy_btn">복사하기</button></span>
-                                            <span class="mail" v-else>-</span>
-                                        </dd>
-                                    </dl>
-                                </div>
-
-                            </div>
-                            <!-- [pub] 06.10 전공분야 있는 교원만 표시 -->
-                            <a href="#" v-show="(sList.userDivcdNm === '교원' ? (sList.jbttlCd == null && sList.srngDetailMjrNm) : sList.taskFldNm)" class="major_view" @click="majorPopModal(sList);">
-                                <span>{{sList.userDivcdNm == '교원' ? '전공분야' : '담당업무'}}</span>
-                                <p>{{sList.userDivcdNm == '교원' ? sList.srngDetailMjrNm : sList.taskFldNm}}</p>
-                            </a>
-                            <!-- //[pub] 06.10 전공분야 있는 교원만 표시 -->
-                            <button class="detail_btn"><span class="sr-only">상세정보 열기닫기</span></button>
-                        </li>
-                    </ul>
-
-                    <!-- 직원 : list_wrap에 클래스 stf 추가 -->
-                    <!-- <ul class="list_wrap box sty2 stf">
-                        <li>
-                            <a href="#">
-                                <div class="top">
-                                    <div>
-                                        <div class="name"><strong>김교수</strong><p v-if="sList.constntChcrtNm != null"> / 金敎授</p><span> (1950)</span></div>
-                                        <span>교수 · 차세대반도체 소자</span>
-                                        <span class="mail">uos@uos.ac.kr</span>
-                                    </div>
-                                </div>
-                                <div class="bottom">
-                                    <dl>
-                                        <dt>TEL</dt>
-                                        <dd><span class="underln">02-1234-1234</span></dd>
-                                    </dl>
-                                    <dl>
-                                        <dt>FAX</dt>
-                                        <dd><span>02-1234-1235</span></dd>
-                                    </dl>
-                                    <dl>
-                                        <dt>H.P</dt>
-                                        <dd><span class="underln">010-5678-5678</span></dd>
-                                    </dl>
-                                </div>
-                                <button class="detail_btn"><span class="sr-only">상세정보 열기닫기</span></button>
-                            </a>
-                        </li>
-                    </ul> -->
-                    <!-- <div v-show="staffList.length > 0">
-                        <ul>
-                            <li v-for="sList in staffList">
-                                <span>{{sList.constntNm}}</span> <span v-if="sList.constntChcrtNm != null">/ {{sList.constntChcrtNm}} ({{sList.selfBrdt}})</span><br/>
-                                <span>{{sList.ogdpDeptNm}}</span>
-                            </li>
-                        </ul>
-                    </div> -->
-
-
-                    <div class="bg_wrap" v-show="searchPerformed && (emptyCheck(staffList) || staffList.length == 0)">
-                        <p class="detail_srch"><span>검색어</span>에 대한 검색결과가 없습니다.</p>
-                        <p class="desc">입력한 검색어가 정확한지 확인해주세요.</p>
-                    </div>
-                </div>
-                <div class="ctrl_btn_wrap_left">
-                    <a class="d_srch" href="#"><span class="sr-only">검색열기</span></a>
-                </div>
-                <div class="ctrl_btn_wrap">
-                    <a class="scrollTop" href="#" @click="scrollToTop()"><span class="sr-only">맨위로</span></a>
-                    <a class="scrollDown" href="#" @click="scrollToBottom()"><span class="sr-only">맨밑으로</span></a>
-                </div>
-            </div>
-            <div class="cont-tabbox index" :class="{ 'on': activeTabIndex === 3 }">
-                <div class="search_form_wrap">
-                    <div class="sticky_wrap">
-                        <div class="top_bn_btn" @click="goProfileConfig()">
-                            <p>교직원수첩 공개정보 수정</p>
-                            <span>* 정보 수정이 필요할 경우 클릭해주세요.</span>
-                        </div>
-                    </div>
-                </div>
-                <a href="#" v-show="selectedIndex != '0'" class="btn_idx_prev" @click="swipeIndex('minus')">이전색인보기</a>
-                <a href="#" v-show="selectedIndex != '13'" class="btn_idx_next" @click="swipeIndex('plus')">다음색인보기</a>
-                
-                    <div class="index_wrap">
-                        <span v-for="(item, index) in indexItem" 
-                            :key="index" 
-                            :class="{ on: index === selectedIndex }" 
-                            @click="getIndexList(index)">
-                            {{ item.word }}
-                        </span>
-                    </div>
-                
-                <div class="inner">
-                    <ul class="list_wrap box sty1"  v-show="indexList && indexList.length > 0">
-                        <li v-for="iList in indexList" @click="searchIndex(iList.constntNo)">
-                            <a href="#">
-                                <p>{{iList.constntNm}}</p>
-                                <span class="underln">{{iList.mjrNm ? iList.mjrNm : iList.deptNm ? iList.deptNm : iList.univNm ? iList.univNm : iList.ogdpDeptNm}}</span>
-                            </a>
-                        </li>
-                    </ul>
-                    <ul class="list_wrap box sty1"  v-show="emptyCheck(indexList) || indexList.length == 0">
-                        <li style="text-align: center;">
-                            데이터가 없습니다.
-                        </li>
-                    </ul>
-                </div>
-            </div>
-        </div>
-        <!-- [pub] 전공분야 모달 -->
-    <div class="modal_box" id="major_view" v-show="isMajorViewVisible">
-        <div class="cont">
-            <!-- <div class="popup_ic"></div> -->
-            <dl>
-                <h3>{{popModalDetailNm}}</h3>
-            </dl>
-            <dl>
-                <dt>소속</dt>
-                <dd>{{popModalDetailPosi}} · {{popModalDetailDept}}</dd>
-            </dl>
-            <dl>
-                <dt>{{srngDetailMjrTitle}}</dt>
-                <dd>{{srngDetailMjrNm}}</dd>
-            </dl>
-        </div>
-        <div class="btn_wrap">
-            <a href="#" class="col01" @click="majorPopModal()">확인</a>
-        </div>
-    </div>
-    <!-- //[pub] 전공분야 모달 -->
-    </div>
-    <!--content-->
-</div>
-
-
+</body>
+</html>
